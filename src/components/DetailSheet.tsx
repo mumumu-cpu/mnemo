@@ -1,10 +1,14 @@
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { removeItem, runAI, setBody, setStatus, useStore } from "../store";
+import { imagesFrom } from "../image";
+import { addImages, removeItem, runAI, setBody, setQA, setStatus, useStore } from "../store";
 import { STATUS, type Status } from "../types";
 import { burst } from "./Burst";
-import { IconList, IconSpark, IconTrash } from "./Icons";
+import { IconImage, IconList, IconSpark, IconTrash } from "./Icons";
 import { Img } from "./Img";
+import { QAField } from "./QAField";
+
+const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((k, i) => k === b[i]);
 
 export function DetailSheet({ id, onClose, onView }: { id: string | null; onClose: () => void; onView: (k: string) => void }) {
   return (
@@ -25,6 +29,9 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
   const [summary, setSummary] = useState<string | null>(null);
   const controls = useDragControls();
   const saved = useRef(item?.body ?? "");
+  const [uploading, setUploading] = useState(0);
+  const [aiRuns, setAiRuns] = useState(0);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // Debounced autosave; no save button needed.
   useEffect(() => {
@@ -52,10 +59,24 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
     onClose();
   };
 
+  const attach = async (files: File[]) => {
+    const room = 12 - item.images.length - uploading;
+    const picked = files.slice(0, Math.max(0, room));
+    if (!picked.length) return;
+    setUploading((n) => n + picked.length);
+    await addImages(id, picked);
+    setUploading((n) => n - picked.length);
+  };
+
+  // Same image rules as the review card, so what's edited here is what the card shows.
+  const questionImages = item.questionImages ?? [];
+  const answerImages = item.answerImages ?? item.images.slice(0, 1);
+
   const ai = async (mode: "quiz" | "summary") => {
     setBusy(mode);
     const res = await runAI(id, mode);
     setBusy(null);
+    if (mode === "quiz" && res?.item) setAiRuns((n) => n + 1);
     if (res?.summary) setSummary(res.summary);
   };
 
@@ -81,20 +102,68 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
           <div className="grab" />
         </div>
         <div className="sheet-scroll">
-          <textarea aria-label="メモ本文" value={text} onChange={(e) => setText(e.target.value)} rows={4} />
+          <textarea
+            aria-label="メモ本文"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onPaste={(e) => {
+              const files = imagesFrom(e.clipboardData);
+              if (!files.length) return;
+              e.preventDefault();
+              attach(files);
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              const files = imagesFrom(e.dataTransfer);
+              if (!files.length) return;
+              e.preventDefault();
+              attach(files);
+            }}
+            rows={4}
+          />
 
-          {item.images.length > 0 && (
-            <>
-              <h4>画像</h4>
-              <div className="gallery">
-                {item.images.map((k) => (
-                  <motion.button key={k} className="im" aria-label="画像を拡大" style={{ position: "relative" }} onClick={() => onView(k)} whileTap={{ scale: 0.95 }}>
-                    <Img k={k} />
-                  </motion.button>
-                ))}
-              </div>
-            </>
-          )}
+          <h4>画像</h4>
+          <div className="gallery" data-testid="sheet-gallery">
+            <AnimatePresence initial={false}>
+              {item.images.map((k) => (
+                <motion.button
+                  key={k}
+                  className="im"
+                  aria-label="画像を拡大"
+                  style={{ position: "relative" }}
+                  onClick={() => onView(k)}
+                  whileTap={{ scale: 0.95 }}
+                  layout
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Img k={k} />
+                </motion.button>
+              ))}
+              {Array.from({ length: uploading }, (_, i) => (
+                <motion.div key={`up-${i}`} className="im skel" style={{ padding: 0, position: "relative" }} initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                  <b style={{ position: "absolute", inset: 0, height: "100%", borderRadius: 0 }} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {item.images.length + uploading < 12 && (
+              <motion.button className="im add-tile" aria-label="画像を追加" data-testid="sheet-add-image" whileTap={{ scale: 0.92 }} onClick={() => fileInput.current?.click()}>
+                <IconImage />
+              </motion.button>
+            )}
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                attach(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
+          </div>
 
           <h4>ステータス</h4>
           <div className="status-pick">
@@ -145,16 +214,25 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
                 <b style={{ width: "55%" }} />
               </motion.div>
             )}
-            {!busy && item.question && (
-              <motion.div key={`qa-${item.question}`} style={{ marginTop: 12 }} initial={{ opacity: 0, y: 10, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}>
-                <div className="qa-box" data-testid="qa-question">
-                  <small>Q</small>
-                  {item.question}
-                </div>
-                <div className="qa-box" data-testid="qa-answer">
-                  <small>A</small>
-                  {item.answer}
-                </div>
+            {!busy && (item.question || item.questionImages?.length) && (
+              <motion.div key={`qa-${aiRuns}`} style={{ marginTop: 12 }} initial={{ opacity: 0, y: 10, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}>
+                <QAField
+                  itemId={id}
+                  label="Q"
+                  testId="qa-question"
+                  value={item.question ?? ""}
+                  images={questionImages}
+                  required
+                  onSave={(q, imgs) => setQA(id, q, item.answer ?? "", sameKeys(imgs, questionImages) ? undefined : imgs)}
+                />
+                <QAField
+                  itemId={id}
+                  label="A"
+                  testId="qa-answer"
+                  value={item.answer ?? ""}
+                  images={answerImages}
+                  onSave={(a, imgs) => setQA(id, item.question ?? "", a, undefined, sameKeys(imgs, answerImages) ? undefined : imgs)}
+                />
               </motion.div>
             )}
             {!busy && summary && (

@@ -267,6 +267,20 @@ textarea { font: inherit; color: inherit; }
 .qa-box small { display: block; font-size: 11px; font-weight: 700; color: var(--ink-3); margin-bottom: 4px; }
 .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .gallery .im { aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.5); }
+.qa-field { position: relative; }
+.qa-field.editing { background: rgba(255, 255, 255, 0.82); box-shadow: 0 0 0 4px rgba(111, 141, 255, 0.16); }
+.qa-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin: -4px -6px 4px 0; }
+.qa-head small { margin: 0; }
+.qa-tools { display: flex; gap: 6px; }
+.face-btn.small { width: 32px; height: 32px; }
+.face-btn.small svg { width: 15px; height: 15px; }
+.face-btn.small .spinner { width: 14px; height: 14px; }
+.qa-input { width: 100%; border: 0; outline: 0; resize: none; padding: 0; background: transparent; font-size: 15px; line-height: 1.6; min-height: 48px; }
+.qa-imgs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; scrollbar-width: none; }
+.qa-imgs .im { position: relative; flex: none; width: 72px; height: 72px; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,.5); }
+.qa-imgs .im img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery .add-tile { display: grid; place-items: center; color: var(--ink-3); background: rgba(255, 255, 255, 0.45); box-shadow: inset 0 0 0 1.5px rgba(20, 22, 60, 0.08); }
+.gallery .add-tile svg { width: 24px; height: 24px; }
 .gallery img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .danger-btn { width: 100%; height: 46px; margin-top: 22px; border-radius: 16px; color: var(--danger); font-weight: 600; background: rgba(255, 90, 110, 0.08); }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.7s linear infinite; }
@@ -314,8 +328,6 @@ textarea { font: inherit; color: inherit; }
 .face .label { position: absolute; top: 20px; left: 0; right: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--ink-3); }
 .face .text { font-size: clamp(19px, 5.4vw, 26px); line-height: 1.55; font-weight: 600; white-space: pre-wrap; word-break: break-word; overflow-y: auto; max-height: 100%; }
 .face .text.small { font-size: 16px; font-weight: 500; text-align: left; }
-.face .fimg { max-height: 42%; margin: 0 auto 16px; border-radius: 18px; overflow: hidden; }
-.face .fimg img { max-height: 100%; max-width: 100%; display: block; }
 .face .tap { position: absolute; bottom: 20px; left: 0; right: 0; font-size: 12px; color: var(--ink-3); display: flex; justify-content: center; }
 .face .tap svg { width: 22px; height: 22px; opacity: .5; }
 .face-tools { position: absolute; top: 12px; right: 12px; z-index: 4; height: 40px; display: flex; }
@@ -328,6 +340,22 @@ textarea { font: inherit; color: inherit; }
   box-shadow: 0 6px 18px rgba(34, 195, 142, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 .flash.is-editing { cursor: default; }
+.face-tools-row { display: flex; gap: 8px; }
+.face-btn:disabled { opacity: 0.5; }
+.face-btn.save .spinner { width: 16px; height: 16px; }
+.face-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; max-height: 100%; min-height: 0; }
+.fimgs { display: grid; gap: 8px; width: 100%; max-height: 46vh; position: relative; }
+.fimgs.n1 { grid-template-columns: 1fr; }
+.fimgs.n2 { grid-template-columns: 1fr 1fr; }
+.fimgs.n3 { grid-template-columns: 1fr 1fr 1fr; }
+.fimgs .fimg { position: relative; margin: 0; max-height: none; border-radius: 18px; overflow: hidden; background: rgba(255,255,255,.5); }
+.fimgs.n1 .fimg { max-height: 40vh; display: grid; place-items: center; }
+.fimgs.n1 .fimg img { max-height: 40vh; max-width: 100%; width: auto; }
+.fimgs.n2 .fimg, .fimgs.n3 .fimg { aspect-ratio: 1; }
+.fimgs.n2 .fimg img, .fimgs.n3 .fimg img { width: 100%; height: 100%; object-fit: cover; }
+.fimgs-more { position: absolute; right: 8px; bottom: 8px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; background: rgba(20, 22, 31, 0.5); }
+.edit-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: none; }
+.thumb-busy { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; background: rgba(20, 22, 31, 0.28); }
 .face-edit { width: 100%; }
 .face-edit textarea {
   width: 100%; min-height: 96px; resize: none; border: 0; outline: 0;

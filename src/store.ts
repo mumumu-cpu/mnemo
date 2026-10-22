@@ -143,24 +143,41 @@ async function flush() {
     for (;;) {
       const it = [...state.items].reverse().find((i) => i.pending && !preparing.has(i.id));
       if (!it) break;
-      const keys: string[] = [];
-      for (const k of it.images) {
-        if (!k.startsWith("local:")) {
-          keys.push(k);
-          continue;
+      const uploaded = new Map<string, string>();
+      const upload = async (list: string[] = []) => {
+        const out: string[] = [];
+        for (const k of list) {
+          if (!k.startsWith("local:")) {
+            out.push(k);
+            continue;
+          }
+          if (!uploaded.has(k)) {
+            const blob = await get<Blob>(`blob:${k}`);
+            if (!blob) continue;
+            const { key } = await api.upload(blob);
+            if (blobUrls.has(k)) blobUrls.set(key, blobUrls.get(k)!);
+            uploaded.set(k, key);
+          }
+          out.push(uploaded.get(k)!);
         }
-        const blob = await get<Blob>(`blob:${k}`);
-        if (!blob) continue;
-        const { key } = await api.upload(blob);
-        if (blobUrls.has(k)) blobUrls.set(key, blobUrls.get(k)!);
-        keys.push(key);
-      }
+        return out;
+      };
+      const keys = await upload(it.images);
       const { item } = await api.create({ id: it.id, body: it.body, images: keys, createdAt: it.createdAt, status: it.status });
-      // The user may have edited the memo while it was uploading.
-      const latest = state.items.find((i) => i.id === it.id);
-      setItems((items) => items.map((i) => (i.id === it.id ? { ...item, body: latest?.body ?? item.body } : i)));
-      if (latest && latest.body !== item.body) api.patch(item.id, { body: latest.body }).catch(handleError);
-      await Promise.all(it.images.filter((k) => k.startsWith("local:")).map((k) => del(`blob:${k}`)));
+      // The user may have edited the memo (or its card) while it was uploading.
+      const latest = state.items.find((i) => i.id === it.id) ?? it;
+      const extra: Record<string, unknown> = {};
+      if (latest.body !== item.body) extra.body = latest.body;
+      if (latest.images.length !== it.images.length || latest.images.some((k, i) => k !== it.images[i])) extra.images = await upload(latest.images);
+      if (latest.question) extra.question = latest.question;
+      if (latest.answer) extra.answer = latest.answer;
+      if (latest.questionImages) extra.questionImages = await upload(latest.questionImages);
+      if (latest.answerImages) extra.answerImages = await upload(latest.answerImages);
+      let synced = item;
+      if (Object.keys(extra).length) synced = (await api.patch(item.id, extra)).item;
+      setItems((items) => items.map((i) => (i.id === it.id ? synced : i)));
+      const locals = [...it.images, ...latest.images, ...(latest.questionImages ?? []), ...(latest.answerImages ?? [])].filter((k) => k.startsWith("local:"));
+      await Promise.all([...new Set(locals)].map((k) => del(`blob:${k}`)));
     }
   } catch (e) {
     handleError(e);
@@ -262,8 +279,51 @@ export const setStatus = (id: string, status: Status, reviewed = false) =>
 
 export const setBody = (id: string, body: string) => mutate(id, { body }, { body });
 
-export const setQA = (id: string, question: string, answer: string) =>
-  mutate(id, { question, answer }, { question, answer });
+export const setQA = (id: string, question: string, answer: string, questionImages?: string[], answerImages?: string[]) =>
+  mutate(
+    id,
+    { question, answer, ...(questionImages && { questionImages }), ...(answerImages && { answerImages }) },
+    { question, answer, ...(questionImages && { questionImages }), ...(answerImages && { answerImages }) },
+  );
+
+/**
+ * Compresses images for an item and makes them referenceable right away. Synced
+ * items get server keys; unsynced ones keep "local:" keys in IndexedDB until the
+ * item's first sync uploads them. Returns null if an upload failed.
+ */
+export async function stageImages(itemId: string, files: Blob[]): Promise<string[] | null> {
+  const owner = state.items.find((i) => i.id === itemId);
+  const pending = !owner || !!owner.pending || state.auth !== "in";
+  const keys: string[] = [];
+  for (const f of files) {
+    const small = await compressImage(f).catch(() => f);
+    const preview = URL.createObjectURL(small);
+    if (!pending) {
+      try {
+        const { key } = await api.upload(small);
+        blobUrls.set(key, preview);
+        keys.push(key);
+      } catch (e) {
+        handleError(e);
+        return null;
+      }
+      continue;
+    }
+    const key = `local:${crypto.randomUUID()}`;
+    blobUrls.set(key, preview);
+    await set(`blob:${key}`, small);
+    keys.push(key);
+  }
+  return keys;
+}
+
+export async function addImages(id: string, files: Blob[]) {
+  const keys = await stageImages(id, files);
+  const it = state.items.find((i) => i.id === id);
+  if (!it || !keys?.length) return;
+  const images = [...it.images, ...keys].slice(0, 12);
+  return mutate(id, { images }, { images });
+}
 
 const UNDO_MS = 4000;
 

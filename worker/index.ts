@@ -20,6 +20,8 @@ type ItemRow = {
   status: number;
   question: string | null;
   answer: string | null;
+  question_images: string | null;
+  answer_images: string | null;
   reviews: number;
   created_at: number;
   updated_at: number;
@@ -28,6 +30,10 @@ type ItemRow = {
 const COOKIE = "mnemo_session";
 const SESSION_DAYS = 60;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_FACE_IMAGES = 6;
+
+const imageKeys = (v: unknown, max: number) =>
+  Array.isArray(v) ? JSON.stringify(v.filter((k): k is string => typeof k === "string" && /^[\w-]{8,64}$/.test(k)).slice(0, max)) : null;
 const TEXT_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 
 const googleJwks = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
@@ -68,6 +74,8 @@ const toItem = (r: ItemRow) => ({
   status: r.status,
   question: r.question,
   answer: r.answer,
+  questionImages: r.question_images ? (JSON.parse(r.question_images) as string[]) : null,
+  answerImages: r.answer_images ? (JSON.parse(r.answer_images) as string[]) : null,
   reviews: r.reviews,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -172,14 +180,21 @@ app.post("/items", async (c) => {
 });
 
 app.patch("/items/:id", async (c) => {
-  const b = await c.req.json<Partial<{ body: string; status: number; question: string; answer: string; reviewed: boolean; images: string[] }>>();
+  const b = await c.req.json<
+    Partial<{ body: string; status: number; question: string; answer: string; reviewed: boolean; images: string[]; questionImages: string[]; answerImages: string[] }>
+  >();
   const sets: string[] = [];
   const vals: unknown[] = [];
   if (typeof b.body === "string") (sets.push("body = ?"), vals.push(b.body.slice(0, 20000)));
   if (typeof b.status === "number" && [0, 1, 2].includes(b.status)) (sets.push("status = ?"), vals.push(b.status));
   if (typeof b.question === "string") (sets.push("question = ?"), vals.push(b.question.slice(0, 2000)));
   if (typeof b.answer === "string") (sets.push("answer = ?"), vals.push(b.answer.slice(0, 4000)));
-  if (Array.isArray(b.images)) (sets.push("images = ?"), vals.push(JSON.stringify(b.images.slice(0, 12))));
+  const images = imageKeys(b.images, 12);
+  const questionImages = imageKeys(b.questionImages, MAX_FACE_IMAGES);
+  const answerImages = imageKeys(b.answerImages, MAX_FACE_IMAGES);
+  if (images) (sets.push("images = ?"), vals.push(images));
+  if (questionImages) (sets.push("question_images = ?"), vals.push(questionImages));
+  if (answerImages) (sets.push("answer_images = ?"), vals.push(answerImages));
   if (b.reviewed) sets.push("reviews = reviews + 1");
   if (!sets.length) return c.json({ error: "bad_request" }, 400);
   sets.push("updated_at = ?");
@@ -194,11 +209,14 @@ app.patch("/items/:id", async (c) => {
 });
 
 app.delete("/items/:id", async (c) => {
-  const row = await c.env.DB.prepare("DELETE FROM items WHERE id = ? AND user_id = ? RETURNING images")
+  const row = await c.env.DB.prepare(
+    "DELETE FROM items WHERE id = ? AND user_id = ? RETURNING images, question_images, answer_images",
+  )
     .bind(c.req.param("id"), c.get("uid"))
-    .first<{ images: string }>();
+    .first<{ images: string; question_images: string | null; answer_images: string | null }>();
   if (row) {
-    const keys = JSON.parse(row.images) as string[];
+    // Face images may reuse memo images, so delete each key once.
+    const keys = [...new Set([row.images, row.question_images ?? "[]", row.answer_images ?? "[]"].flatMap((j) => JSON.parse(j) as string[]))];
     c.executionCtx.waitUntil(Promise.all(keys.map((k) => c.env.IMAGES.delete(`${c.get("uid")}/${k}`))));
   }
   return c.json({ ok: true });

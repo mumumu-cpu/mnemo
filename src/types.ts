@@ -7,6 +7,9 @@ export type Item = {
   status: Status;
   question: string | null;
   answer: string | null;
+  /** Images on the card's front / back; may reuse keys from `images`. Unset falls back to the memo's images. */
+  questionImages?: string[] | null;
+  answerImages?: string[] | null;
   reviews: number;
   createdAt: number;
   updatedAt: number;

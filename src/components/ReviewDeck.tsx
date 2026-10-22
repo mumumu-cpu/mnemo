@@ -1,14 +1,16 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
+import { imagesFrom } from "../image";
 import { getState, setQA, setStatus, useStore } from "../store";
 import type { Item } from "../types";
 import { burst } from "./Burst";
-import { IconCheck, IconHand, IconPen, IconRotate, IconX } from "./Icons";
+import { DraftThumbs, useDraftImages } from "./DraftImages";
+import { IconCheck, IconHand, IconImage, IconPen, IconRotate, IconX } from "./Icons";
 import { Img } from "./Img";
 
 type Result = "ok" | "ng";
 type Side = "front" | "back";
-type UpdateCard = (id: string, question: string, answer: string) => void;
+type UpdateCard = (id: string, question: string, answer: string, questionImages?: string[], answerImages?: string[]) => void;
 
 const stop = (e: SyntheticEvent) => e.stopPropagation();
 
@@ -17,15 +19,18 @@ const stop = (e: SyntheticEvent) => e.stopPropagation();
  * before React's delegated handlers, so React's stopPropagation alone is too late.
  * Stop the press natively too, so controls inside the card never flip or drag it.
  */
-function useNativeStop(ref: RefObject<HTMLElement | null>) {
-  useEffect(() => {
-    const el = ref.current;
+function useNativeStop<T extends HTMLElement>() {
+  const cleanup = useRef<(() => void) | null>(null);
+  // A callback ref, so listeners attach even when the element mounts late (after an exit animation).
+  return useCallback((el: T | null) => {
+    cleanup.current?.();
+    cleanup.current = null;
     if (!el) return;
     const types = ["pointerdown", "mousedown", "touchstart"] as const;
     const halt = (e: Event) => e.stopPropagation();
     types.forEach((t) => el.addEventListener(t, halt));
-    return () => types.forEach((t) => el.removeEventListener(t, halt));
-  }, [ref]);
+    cleanup.current = () => types.forEach((t) => el.removeEventListener(t, halt));
+  }, []);
 }
 
 const isolate = {
@@ -44,11 +49,15 @@ export function ReviewDeck({ open, onClose }: { open: boolean; onClose: () => vo
 }
 
 function faces(it: Item) {
-  if (it.question) return { front: it.question, back: it.answer ?? "", backImages: it.images };
+  const memoImage = it.images.slice(0, 1);
+  const backImages = it.answerImages ?? memoImage;
+  if (it.question || it.questionImages?.length) {
+    return { front: it.question ?? "", back: it.answer ?? "", frontImages: it.questionImages ?? [], backImages };
+  }
   const [first, ...rest] = it.body.split("\n");
   const restText = rest.join("\n").trim();
-  if (restText) return { front: first, back: restText, backImages: it.images };
-  return { front: it.body, back: "", backImages: it.images, frontImage: !it.body ? it.images[0] : undefined };
+  if (restText) return { front: first, back: restText, frontImages: it.questionImages ?? [], backImages };
+  return { front: it.body, back: "", frontImages: it.questionImages ?? (it.body ? [] : memoImage), backImages };
 }
 
 function Deck({ onClose }: { onClose: () => void }) {
@@ -67,7 +76,8 @@ function Deck({ onClose }: { onClose: () => void }) {
   const current = items.find((i) => i.id === queue[0]);
   const upcoming = items.find((i) => i.id === queue[1]);
 
-  const onUpdateCard: UpdateCard = (id, question, answer) => setQA(id, question, answer);
+  const onUpdateCard: UpdateCard = (id, question, answer, questionImages, answerImages) =>
+    setQA(id, question, answer, questionImages, answerImages);
 
   const decide = (r: Result) => {
     if (!current) return;
@@ -158,23 +168,36 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
 
   const fling = (r: Result) => onDecide(r);
 
-  const save = (side: Side, text: string) => {
+  const save = (side: Side, text: string, images: string[]) => {
     const value = text.trim();
     const question = side === "front" ? value : f.front.trim();
     const answer = side === "back" ? value : f.back.trim();
-    if (!question) return false;
-    if (question !== (item.question ?? "") || answer !== (item.answer ?? "")) onUpdateCard(item.id, question, answer);
+    const frontImages = side === "front" ? images : f.frontImages;
+    if (!question && !frontImages.length) return false;
+    const before = side === "front" ? f.frontImages : f.backImages;
+    const imagesChanged = images.length !== before.length || images.some((k, i) => k !== before[i]);
+    if (question !== (item.question ?? "") || answer !== (item.answer ?? "") || imagesChanged) {
+      onUpdateCard(
+        item.id,
+        question,
+        answer,
+        side === "front" && imagesChanged ? images : undefined,
+        side === "back" && imagesChanged ? images : undefined,
+      );
+    }
     setEditing(null);
     return true;
   };
 
   const faceProps = (side: Side) => ({
+    itemId: item.id,
     side,
     value: side === "front" ? f.front : f.back,
+    images: side === "front" ? f.frontImages : f.backImages,
     editing: editing === side,
     locked: editing !== null && editing !== side,
     onEdit: () => setEditing(side),
-    onSave: (text: string) => save(side, text),
+    onSave: (text: string, images: string[]) => save(side, text, images),
     onCancel: () => setEditing(null),
   });
 
@@ -217,11 +240,6 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
           transition={{ duration: 0.01, delay: 0.1 }}
         >
           <span className="label">Q</span>
-          {f.frontImage && editing !== "front" && (
-            <div className="fimg" style={{ position: "relative" }}>
-              <Img k={f.frontImage} />
-            </div>
-          )}
           <FaceText {...faceProps("front")} />
           {editing !== "front" && (
             <div className="tap">
@@ -237,11 +255,6 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
           transition={{ duration: 0.01, delay: 0.1 }}
         >
           <span className="label">A</span>
-          {f.backImages[0] && editing !== "back" && (
-            <div className="fimg" style={{ position: "relative" }}>
-              <Img k={f.backImages[0]} />
-            </div>
-          )}
           <FaceText {...faceProps("back")} />
         </motion.div>
       </motion.div>
@@ -249,33 +262,53 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
   );
 }
 
+function FaceImages({ keys }: { keys: string[] }) {
+  if (!keys.length) return null;
+  return (
+    <div className={`fimgs n${Math.min(keys.length, 3)}`} data-testid="face-images">
+      {keys.slice(0, 3).map((k) => (
+        <div key={k} className="fimg">
+          <Img k={k} />
+        </div>
+      ))}
+      {keys.length > 3 && <span className="fimgs-more">+{keys.length - 3}</span>}
+    </div>
+  );
+}
+
 function FaceText({
+  itemId,
   side,
   value,
+  images,
   editing,
   locked,
   onEdit,
   onSave,
   onCancel,
 }: {
+  itemId: string;
   side: Side;
   value: string;
+  images: string[];
   editing: boolean;
   locked: boolean;
   onEdit: () => void;
-  onSave: (text: string) => boolean;
+  onSave: (text: string, images: string[]) => boolean;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const draftImages = useDraftImages(itemId);
   const [shake, setShake] = useState(0);
-  const tools = useRef<HTMLDivElement>(null);
-  const area = useRef<HTMLDivElement>(null);
+  const tools = useNativeStop<HTMLDivElement>();
+  const area = useNativeStop<HTMLDivElement>();
   const ta = useRef<HTMLTextAreaElement>(null);
-  useNativeStop(tools);
-  useNativeStop(area);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editing) setDraft(value);
+    if (!editing) return;
+    setDraft(value);
+    draftImages.reset(images);
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The textarea mounts only after the text view has animated out, so focus it on mount.
@@ -290,11 +323,15 @@ function FaceText({
     const el = ta.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.45)}px`;
-  }, [draft, editing]);
+    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * (draftImages.list.length ? 0.28 : 0.45))}px`;
+  }, [draft, editing, draftImages.list.length]);
+
+  const uploading = draftImages.uploading;
+  const addFiles = draftImages.add;
 
   const commit = () => {
-    if (!onSave(draft)) setShake((n) => n + 1);
+    if (uploading) return;
+    if (!onSave(draft, draftImages.keys())) setShake((n) => n + 1);
   };
 
   const label = side === "front" ? "問題" : "回答";
@@ -304,24 +341,53 @@ function FaceText({
       <div className="face-tools" ref={tools} data-no-flip {...isolate}>
         <AnimatePresence mode="popLayout" initial={false}>
           {editing ? (
-            <motion.button
-              key="save"
-              type="button"
-              className="face-btn save"
-              aria-label={`${label}を保存`}
-              data-testid={`save-${side}`}
-              initial={{ scale: 0.4, opacity: 0, rotate: -45 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0 }}
-              exit={{ scale: 0.4, opacity: 0 }}
-              whileTap={{ scale: 0.86 }}
-              transition={{ type: "spring", stiffness: 600, damping: 26 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                commit();
-              }}
-            >
-              <IconCheck />
-            </motion.button>
+            <motion.div key="editing" className="face-tools-row" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.button
+                type="button"
+                className="face-btn glass"
+                aria-label={`${label}に画像を追加`}
+                data-testid={`add-image-${side}`}
+                disabled={draftImages.full}
+                initial={{ scale: 0.4, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                whileTap={{ scale: 0.86 }}
+                transition={{ type: "spring", stiffness: 600, damping: 26, delay: 0.04 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInput.current?.click();
+                }}
+              >
+                <IconImage />
+              </motion.button>
+              <motion.button
+                type="button"
+                className="face-btn save"
+                aria-label={`${label}を保存`}
+                data-testid={`save-${side}`}
+                disabled={uploading}
+                initial={{ scale: 0.4, opacity: 0, rotate: -45 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                whileTap={{ scale: 0.86 }}
+                transition={{ type: "spring", stiffness: 600, damping: 26 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  commit();
+                }}
+              >
+                {uploading ? <span className="spinner" /> : <IconCheck />}
+              </motion.button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  addFiles(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+            </motion.div>
           ) : (
             !locked && (
               <motion.button
@@ -355,11 +421,21 @@ function FaceText({
             className="face-edit"
             data-no-flip
             {...isolate}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              addFiles(imagesFrom(e.dataTransfer));
+            }}
             initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)", x: shake ? [0, -8, 8, -5, 5, 0] : 0 }}
             exit={{ opacity: 0, y: -6, filter: "blur(6px)" }}
             transition={{ duration: 0.22 }}
           >
+            <DraftThumbs draft={draftImages} testId={`edit-images-${side}`} />
             <textarea
               ref={focusOnMount}
               value={draft}
@@ -367,6 +443,13 @@ function FaceText({
               data-testid={`input-${side}`}
               rows={3}
               onChange={(e) => setDraft(e.target.value)}
+              onPaste={(e) => {
+                e.stopPropagation();
+                const files = imagesFrom(e.clipboardData);
+                if (!files.length) return;
+                e.preventDefault();
+                addFiles(files);
+              }}
               onPointerDown={stop}
               onClick={stop}
               onKeyDown={(e) => {
@@ -383,14 +466,18 @@ function FaceText({
         ) : (
           <motion.div
             key="view"
-            className={`text${value.length > 60 ? " small" : ""}`}
-            data-testid={`text-${side}`}
+            className="face-view"
             initial={{ opacity: 0, y: -6, filter: "blur(6px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: 8, filter: "blur(6px)" }}
             transition={{ duration: 0.22 }}
           >
-            {value}
+            <FaceImages keys={images} />
+            {value && (
+              <div className={`text${value.length > 60 ? " small" : ""}`} data-testid={`text-${side}`}>
+                {value}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -49,6 +49,8 @@ export function Composer() {
       if (!files.length) return;
       const t = e.target as HTMLElement | null;
       if (t && t !== ta.current && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+      // Behind an open sheet or review, the composer isn't what the user is looking at.
+      if (document.querySelector(".sheet, .review")) return;
       e.preventDefault();
       addFiles(files);
       ta.current?.focus({ preventScroll: true });
