@@ -251,28 +251,45 @@ export async function signOut() {
 
 // ---------- mutations ----------
 
-export async function addItem(body: string, files: Blob[], deckId: string | null = null, answer = "") {
+export async function addItem(body: string, files: Blob[], deckId: string | null = null, answer = "", answerFiles: Blob[] = []) {
   const id = crypto.randomUUID();
-  const images: string[] = [];
-  for (const f of files) {
-    const key = `local:${crypto.randomUUID()}`;
-    blobUrls.set(key, URL.createObjectURL(f));
-    images.push(key);
-    set(`blob:${key}`, f).catch(() => {});
-  }
+  const stage = (list: Blob[]) =>
+    list.map((f) => {
+      const key = `local:${crypto.randomUUID()}`;
+      blobUrls.set(key, URL.createObjectURL(f));
+      set(`blob:${key}`, f).catch(() => {});
+      return key;
+    });
+  const images = stage(files);
+  const answerImages = stage(answerFiles);
   const now = Date.now();
-  const item: Item = { id, body, images, status: 0, question: null, answer: answer || null, deckId, reviews: 0, createdAt: now, updatedAt: now, pending: true };
+  const item: Item = {
+    id,
+    body,
+    images,
+    status: 0,
+    question: null,
+    answer: answer || null,
+    ...(answerImages.length && { answerImages }),
+    deckId,
+    reviews: 0,
+    createdAt: now,
+    updatedAt: now,
+    pending: true,
+  };
   setItems((items) => [item, ...items]);
-  if (!files.length) {
+  const all = [...files, ...answerFiles];
+  const keys = [...images, ...answerImages];
+  if (!all.length) {
     flush();
     return id;
   }
   // Compress in the background, then upload.
   preparing.add(id);
   Promise.all(
-    files.map(async (f, i) => {
+    all.map(async (f, i) => {
       const small = await compressImage(f).catch(() => f);
-      await set(`blob:${images[i]}`, small);
+      await set(`blob:${keys[i]}`, small);
     }),
   ).finally(() => {
     preparing.delete(id);

@@ -4,7 +4,7 @@ import { setStatus } from "../store";
 import { STATUS, type Item, type Status } from "../types";
 import { burst } from "./Burst";
 import { CardAnswer } from "./CardAnswer";
-import { IconArrowL, IconArrowR, IconCheck, IconCloudOff, IconFlag, IconFolder, IconSpark } from "./Icons";
+import { IconArrowL, IconArrowR, IconCheck, IconCloudOff, IconFlag, IconFolder } from "./Icons";
 import { Img } from "./Img";
 
 const THRESHOLD = 88;
@@ -155,7 +155,6 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
             )}
           </AnimatePresence>
           <div className="card-body">{item.body}</div>
-          <CardAnswer item={item} selecting={selecting} onEditing={setAnswering} />
           {item.images.length > 0 && (
             <div className={`card-imgs${item.body ? "" : " solo"}`}>
               {item.images.slice(0, 4).map((k) => (
@@ -166,6 +165,7 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
               {item.images.length > 4 && <div className="more">+{item.images.length - 4}</div>}
             </div>
           )}
+          <CardAnswer item={item} selecting={selecting} onEditing={setAnswering} />
           <div className="card-meta">
             <motion.span className="chip" layout style={{ color: s.color }} key={item.status} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 600, damping: 22 }}>
               <i style={{ background: s.color }} />
@@ -190,11 +190,6 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
             {deckName && (
               <span className="deck-tag">
                 <IconFolder /> {deckName}
-              </span>
-            )}
-            {!item.answer && !!item.answerImages?.length && (
-              <span className="qa-hint">
-                <IconSpark /> 解答画像あり
               </span>
             )}
             <span style={{ flex: 1 }} />

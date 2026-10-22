@@ -26,10 +26,12 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
   const [text, setText] = useState(() => readDraft(DRAFT_KEY));
   const [answer, setAnswer] = useState(() => readDraft(ANSWER_DRAFT_KEY));
   const [imgs, setImgs] = useState<Draft[]>([]);
+  const [answerImgs, setAnswerImgs] = useState<Draft[]>([]);
   const [drag, setDrag] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
   const answerTa = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const answerFileInput = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => autoGrow(ta.current), [text]);
   useLayoutEffect(() => autoGrow(answerTa.current), [answer]);
@@ -46,9 +48,12 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
     ta.current?.focus({ preventScroll: true });
   }, []);
 
-  const addFiles = (files: File[]) => {
+  /** Images go to the question unless they were pasted or dropped on the answer. */
+  const addFiles = (files: File[], side: "question" | "answer" = "question") => {
     if (!files.length) return;
-    setImgs((cur) => [...cur, ...files.map((file) => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) }))].slice(0, 12));
+    const drafts = files.map((file) => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) }));
+    if (side === "answer") setAnswerImgs((cur) => [...cur, ...drafts].slice(0, 6));
+    else setImgs((cur) => [...cur, ...drafts].slice(0, 12));
   };
 
   // Images pasted anywhere on the page land in the composer.
@@ -62,7 +67,7 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
       // Behind an open sheet or review, the composer isn't what the user is looking at.
       if (document.querySelector(".sheet, .review")) return;
       e.preventDefault();
-      addFiles(files);
+      addFiles(files, t === answerTa.current ? "answer" : "question");
       if (!inComposer) ta.current?.focus({ preventScroll: true });
     };
     document.addEventListener("paste", onPaste);
@@ -80,11 +85,12 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
 
   const submit = () => {
     if (!canSend) return;
-    addItem(text.trim(), imgs.map((d) => d.file), deckId, answer.trim());
+    addItem(text.trim(), imgs.map((d) => d.file), deckId, answer.trim(), answerImgs.map((d) => d.file));
     navigator.vibrate?.(8);
     setText("");
     setAnswer("");
     setImgs([]);
+    setAnswerImgs([]);
     ta.current?.focus({ preventScroll: true });
   };
 
@@ -106,7 +112,8 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
       onDrop={(e) => {
         e.preventDefault();
         setDrag(false);
-        addFiles(imagesFrom(e.dataTransfer));
+        const onAnswer = !!(e.target as HTMLElement).closest(".composer-answer, .answer-thumbs");
+        addFiles(imagesFrom(e.dataTransfer), onAnswer ? "answer" : "question");
       }}
     >
       <textarea
@@ -119,30 +126,7 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
         onChange={(e) => setText(e.target.value)}
         onKeyDown={submitOnCmdEnter}
       />
-      <AnimatePresence initial={false}>
-        {imgs.length > 0 && (
-          <motion.div className="thumbs" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-            <AnimatePresence initial={false}>
-              {imgs.map((d) => (
-                <motion.div
-                  key={d.id}
-                  className="thumb"
-                  layout
-                  initial={{ opacity: 0, scale: 0.4, rotate: -8 }}
-                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                  exit={{ opacity: 0, scale: 0.4 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 28 }}
-                >
-                  <img src={d.url} alt="" />
-                  <button type="button" className="x" aria-label="画像を外す" onClick={() => setImgs((c) => c.filter((x) => x.id !== d.id))}>
-                    <IconX />
-                  </button>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Thumbs list={imgs} onRemove={(id) => setImgs((c) => c.filter((x) => x.id !== id))} />
       <label className="composer-answer">
         <span className="composer-answer-label">A</span>
         <textarea
@@ -156,7 +140,32 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={submitOnCmdEnter}
         />
+        <motion.button
+          type="button"
+          className="icon-btn small"
+          aria-label="解答に画像を追加"
+          data-testid="composer-answer-image"
+          whileTap={{ scale: 0.85 }}
+          onClick={(e) => {
+            e.preventDefault();
+            answerFileInput.current?.click();
+          }}
+        >
+          <IconImage />
+        </motion.button>
+        <input
+          ref={answerFileInput}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            addFiles(Array.from(e.target.files ?? []), "answer");
+            e.target.value = "";
+          }}
+        />
       </label>
+      <Thumbs list={answerImgs} className="answer-thumbs" testId="composer-answer-thumbs" onRemove={(id) => setAnswerImgs((c) => c.filter((x) => x.id !== id))} />
       <div className="composer-row">
         <motion.button type="button" className="icon-btn" aria-label="画像を追加" whileTap={{ scale: 0.85 }} onClick={() => fileInput.current?.click()}>
           <IconImage />
@@ -186,5 +195,40 @@ export function Composer({ deckId = null }: { deckId?: string | null }) {
         </motion.button>
       </div>
     </motion.form>
+  );
+}
+
+function Thumbs({ list, onRemove, className = "", testId }: { list: Draft[]; onRemove: (id: string) => void; className?: string; testId?: string }) {
+  return (
+    <AnimatePresence initial={false}>
+      {list.length > 0 && (
+        <motion.div
+          className={`thumbs ${className}`}
+          data-testid={testId}
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+        >
+          <AnimatePresence initial={false}>
+            {list.map((d) => (
+              <motion.div
+                key={d.id}
+                className="thumb"
+                layout
+                initial={{ opacity: 0, scale: 0.4, rotate: -8 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.4 }}
+                transition={{ type: "spring", stiffness: 500, damping: 28 }}
+              >
+                <img src={d.url} alt="" />
+                <button type="button" className="x" aria-label="画像を外す" onClick={() => onRemove(d.id)}>
+                  <IconX />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
