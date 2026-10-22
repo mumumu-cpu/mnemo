@@ -41,6 +41,7 @@ export function App() {
   const ready = useStore((s) => s.ready);
   const decks = useStore((s) => s.decks);
   const auth = useStore((s) => s.auth);
+  const decksLoaded = useStore((s) => s.decksLoaded);
   const [filter, setFilter] = useState<Filter>(readFilter);
   const [deck, setDeck] = useState<DeckFilter>(readDeck);
   const [selecting, setSelecting] = useState(false);
@@ -66,9 +67,10 @@ export function App() {
   }, [filter, deck]);
 
   // A remembered file may have been deleted elsewhere, or belong to a signed-out account.
+  // Only judge once the server's list has arrived; the device cache may not know new files yet.
   useEffect(() => {
-    if (deck !== "all" && auth !== "loading" && ready && !decks.some((d) => d.id === deck)) setDeck("all");
-  }, [deck, decks, auth, ready]);
+    if (deck !== "all" && decksLoaded && !decks.some((d) => d.id === deck)) setDeck("all");
+  }, [deck, decks, decksLoaded]);
 
   useEffect(() => {
     if (!selecting) return;

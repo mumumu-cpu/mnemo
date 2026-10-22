@@ -11,6 +11,8 @@ type State = {
   devAuth: boolean;
   items: Item[];
   decks: Deck[];
+  /** true once the server's file list has been loaded (or we know there's none to load). */
+  decksLoaded: boolean;
   /** true once we have something to show (cache or server). Drives skeletons. */
   ready: boolean;
   syncing: boolean;
@@ -24,6 +26,7 @@ let state: State = {
   devAuth: false,
   items: [],
   decks: [],
+  decksLoaded: false,
   ready: false,
   syncing: false,
   toast: null,
@@ -129,7 +132,7 @@ export async function boot() {
       setItems((items) => items.filter((i) => i.pending));
       setDecks(() => []);
     }
-    setState({ auth: "out", user: null, ready: true });
+    setState({ auth: "out", user: null, ready: true, decksLoaded: me.status === "fulfilled" });
   }
 }
 
@@ -138,6 +141,7 @@ export async function sync() {
   try {
     const [{ items }, { decks }] = await Promise.all([api.items(), api.decks()]);
     setDecks(() => decks);
+    setState({ decksLoaded: true });
     // A file picked for an unsynced memo while signed out can't exist on the server.
     const known = new Set(decks.map((d) => d.id));
     setItems((cur) => [...cur.filter((i) => i.pending).map((i) => (i.deckId && !known.has(i.deckId) ? { ...i, deckId: null } : i)), ...items]);
