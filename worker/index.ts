@@ -287,18 +287,41 @@ app.post("/items/move", async (c) => {
   return c.json({ ok: true, deckId });
 });
 
+type DeletedRow = { images: string; question_images: string | null; answer_images: string | null };
+
+// Card images may reuse memo images, so delete each key once.
+function purgeImages(c: any, rows: DeletedRow[]) {
+  const uid = c.get("uid");
+  const keys = [...new Set(rows.flatMap((r) => [r.images, r.question_images ?? "[]", r.answer_images ?? "[]"].flatMap((j) => JSON.parse(j) as string[])))];
+  c.executionCtx.waitUntil(Promise.all(keys.map((k) => (c.env as Env).IMAGES.delete(`${uid}/${k}`))));
+}
+
 app.delete("/items/:id", async (c) => {
   const row = await c.env.DB.prepare(
     "DELETE FROM items WHERE id = ? AND user_id = ? RETURNING images, question_images, answer_images",
   )
     .bind(c.req.param("id"), c.get("uid"))
-    .first<{ images: string; question_images: string | null; answer_images: string | null }>();
-  if (row) {
-    // Face images may reuse memo images, so delete each key once.
-    const keys = [...new Set([row.images, row.question_images ?? "[]", row.answer_images ?? "[]"].flatMap((j) => JSON.parse(j) as string[]))];
-    c.executionCtx.waitUntil(Promise.all(keys.map((k) => c.env.IMAGES.delete(`${c.get("uid")}/${k}`))));
-  }
+    .first<DeletedRow>();
+  if (row) purgeImages(c, [row]);
   return c.json({ ok: true });
+});
+
+app.post("/items/delete", async (c) => {
+  const ids = ((await c.req.json<{ ids?: string[] }>()).ids ?? []).filter((i) => typeof i === "string").slice(0, 1000);
+  if (!ids.length) return c.json({ error: "bad_request" }, 400);
+  const uid = c.get("uid");
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+  const results = await c.env.DB.batch<DeletedRow>(
+    chunks.map((chunk) =>
+      c.env.DB.prepare(
+        `DELETE FROM items WHERE user_id = ? AND id IN (${chunk.map(() => "?").join(",")}) RETURNING images, question_images, answer_images`,
+      ).bind(uid, ...chunk),
+    ),
+  );
+  const rows = results.flatMap((r) => r.results);
+  purgeImages(c, rows);
+  return c.json({ ok: true, deleted: rows.length });
 });
 
 app.post("/images", async (c) => {

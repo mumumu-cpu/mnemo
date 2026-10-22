@@ -35,6 +35,7 @@ export const api = {
     req<{ item: Item }>("/items", json("POST", b)),
   patch: (id: string, b: Record<string, unknown>) => req<{ item: Item }>(`/items/${id}`, json("PATCH", b)),
   remove: (id: string) => req<{ ok: true }>(`/items/${id}`, { method: "DELETE" }),
+  removeMany: (ids: string[]) => req<{ ok: true; deleted: number }>("/items/delete", json("POST", { ids })),
   decks: () => req<{ decks: Deck[] }>("/decks"),
   createDeck: (b: { id: string; name: string }) => req<{ deck: Deck }>("/decks", json("POST", b)),
   renameDeck: (id: string, name: string) => req<{ deck: Deck }>(`/decks/${id}`, json("PATCH", { name })),

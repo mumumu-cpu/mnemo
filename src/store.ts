@@ -420,33 +420,41 @@ export async function moveItems(ids: string[], deckId: string | null) {
 const UNDO_MS = 4000;
 
 /** Removes immediately from the list, but only deletes for real once the undo window has passed. */
-export function removeItem(id: string) {
-  const index = state.items.findIndex((i) => i.id === id);
-  const it = state.items[index];
-  if (!it) return;
-  setItems((items) => items.filter((i) => i.id !== id));
+export const removeItem = (id: string) => removeItems([id]);
+
+export function removeItems(ids: string[]) {
+  const wanted = new Set(ids);
+  const removed = state.items.flatMap((it, index) => (wanted.has(it.id) ? [{ it, index }] : []));
+  if (!removed.length) return;
+  setItems((items) => items.filter((i) => !wanted.has(i.id)));
+  const restore = () =>
+    setItems((items) => {
+      const next = [...items];
+      for (const { it, index } of removed) next.splice(Math.min(index, next.length), 0, it);
+      return next;
+    });
   let undone = false;
   const timer = setTimeout(async () => {
     if (undone) return;
-    if (it.pending) {
-      it.images.forEach((k) => del(`blob:${k}`).catch(() => {}));
-      return;
-    }
+    for (const { it } of removed) if (it.pending) it.images.forEach((k) => del(`blob:${k}`).catch(() => {}));
+    const synced = removed.filter(({ it }) => !it.pending).map(({ it }) => it.id);
+    if (!synced.length) return;
     try {
-      await api.remove(id);
+      if (synced.length === 1) await api.remove(synced[0]);
+      else await api.removeMany(synced);
     } catch (e) {
-      setItems((items) => [...items.slice(0, index), it, ...items.slice(index)]);
+      restore();
       handleError(e);
     }
   }, UNDO_MS);
   toast(
-    "削除しました",
+    removed.length === 1 ? "削除しました" : `${removed.length}件を削除しました`,
     {
       label: "元に戻す",
       run: () => {
         undone = true;
         clearTimeout(timer);
-        setItems((items) => [...items.slice(0, index), it, ...items.slice(index)]);
+        restore();
         dismissToast();
       },
     },

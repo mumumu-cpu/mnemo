@@ -5,12 +5,12 @@ import { Composer } from "./components/Composer";
 import { DeckBar, type DeckFilter } from "./components/DeckBar";
 import { DeckEditor, DeckPicker } from "./components/DeckSheets";
 import { DetailSheet } from "./components/DetailSheet";
-import { IconFolder, IconPlay, IconX } from "./components/Icons";
+import { IconFolder, IconPlay, IconTrash, IconX } from "./components/Icons";
 import { ImageViewer } from "./components/ImageViewer";
 import { ItemCard } from "./components/ItemCard";
 import { ReviewDeck } from "./components/ReviewDeck";
 import { Toast } from "./components/Toast";
-import { boot, getState, moveItems, toast, useStore } from "./store";
+import { boot, getState, moveItems, removeItems, toast, useStore } from "./store";
 import { STATUS } from "./types";
 
 type Filter = "all" | 0 | 1 | 2;
@@ -199,6 +199,19 @@ export function App() {
                 onClick={() => setSelected(allVisibleSelected ? new Set() : new Set(visible.map((i) => i.id)))}
               >
                 {allVisibleSelected ? "全解除" : "全選択"}
+              </motion.button>
+              <motion.button
+                className="dock-btn danger"
+                aria-label={`${selected.size}件を削除`}
+                data-testid="delete-selected"
+                whileTap={{ scale: 0.9 }}
+                disabled={!selected.size}
+                onClick={() => {
+                  removeItems([...selected]);
+                  endSelect();
+                }}
+              >
+                <IconTrash />
               </motion.button>
               <motion.button
                 className="play"
