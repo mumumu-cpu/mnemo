@@ -5,7 +5,7 @@ import { getState, setAnswer, setMemo, setStatus, useStore } from "../store";
 import type { Item } from "../types";
 import { burst } from "./Burst";
 import { DraftThumbs, useDraftImages } from "./DraftImages";
-import { IconCheck, IconFolder, IconHand, IconImage, IconPen, IconRotate, IconX } from "./Icons";
+import { IconCheck, IconFolder, IconHand, IconImage, IconPen, IconRotate, IconShuffle, IconX } from "./Icons";
 import { Img } from "./Img";
 
 type Result = "ok" | "ng";
@@ -48,6 +48,28 @@ export function ReviewDeck({ open, deckId, onClose }: { open: boolean; deckId: s
   return <AnimatePresence>{open && <Deck deckId={deckId} onClose={onClose} />}</AnimatePresence>;
 }
 
+const SHUFFLE_KEY = "mnemo-shuffle";
+
+function readShuffle() {
+  try {
+    return localStorage.getItem(SHUFFLE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Least-reviewed, then oldest, first. */
+const inOrder = (items: Item[]) => [...items].sort((a, b) => a.reviews - b.reviews || a.createdAt - b.createdAt).map((i) => i.id);
+
+function shuffled<T>(list: T[]): T[] {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /** Cards still to memorise, limited to one file when `deckId` is set. */
 const dueIn = (items: Item[], deckId: string | null) => items.filter((i) => i.status !== 2 && (!deckId || i.deckId === deckId));
 
@@ -58,12 +80,25 @@ function faces(it: Item) {
 
 function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void }) {
   const deckName = useStore((s) => s.decks.find((d) => d.id === deckId)?.name);
-  // Snapshot the queue: everything not yet memorised, oldest-reviewed first.
-  const [queue, setQueue] = useState(() =>
-    dueIn(getState().items, deckId)
-      .sort((a, b) => a.reviews - b.reviews || a.createdAt - b.createdAt)
-      .map((i) => i.id),
-  );
+  const [shuffle, setShuffle] = useState(readShuffle);
+  // Snapshot the queue: everything not yet memorised, least-reviewed first, or shuffled.
+  const order = (ids: string[], random: boolean) => {
+    if (random) return shuffled(ids);
+    const byId = new Map(getState().items.map((i) => [i.id, i]));
+    return inOrder(ids.flatMap((id) => byId.get(id) ?? []));
+  };
+  const [queue, setQueue] = useState(() => order(inOrder(dueIn(getState().items, deckId)), shuffle));
+
+  // Toggling mid-review keeps the card in hand and reorders the rest.
+  const toggleShuffle = () => {
+    const next = !shuffle;
+    setShuffle(next);
+    try {
+      localStorage.setItem(SHUFFLE_KEY, next ? "1" : "0");
+    } catch {}
+    setQueue((q) => (q.length ? [q[0], ...order(q.slice(1), next)] : q));
+    navigator.vibrate?.(8);
+  };
   const [total, setTotal] = useState(queue.length);
   const [results, setResults] = useState<Result[]>([]);
   const [round, setRound] = useState(0);
@@ -127,11 +162,23 @@ function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void 
         <span className="review-count" data-testid="review-count">
           {Math.min(done + (finished ? 0 : 1), total)}/{total}
         </span>
+        <motion.button
+          className={`icon-btn glass shuffle${shuffle ? " on" : ""}`}
+          aria-label="シャッフル"
+          aria-pressed={shuffle}
+          data-testid="shuffle"
+          whileTap={{ scale: 0.86 }}
+          animate={{ rotate: shuffle ? 180 : 0 }}
+          transition={{ type: "spring", stiffness: 420, damping: 22 }}
+          onClick={toggleShuffle}
+        >
+          <IconShuffle />
+        </motion.button>
       </div>
 
       {finished ? (
         <Done ok={ok} ng={done - ok} total={total} onClose={onClose} onAgain={() => {
-          const again = dueIn(getState().items, deckId).map((i) => i.id);
+          const again = order(inOrder(dueIn(getState().items, deckId)), shuffle);
           setQueue(again);
           setTotal(again.length);
           setResults([]);

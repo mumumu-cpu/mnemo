@@ -477,3 +477,6 @@ textarea { font: inherit; color: inherit; }
 .dock { width: max-content; max-width: calc(100vw - 24px); white-space: nowrap; }
 .dock .play { white-space: nowrap; }
 .sheet h4.first { margin-top: 4px; }
+.icon-btn.shuffle { width: 38px; height: 38px; flex: none; }
+.icon-btn.shuffle svg { width: 17px; height: 17px; }
+.icon-btn.shuffle.on { color: #fff; background: linear-gradient(135deg, #6f8dff, #9b7bff); box-shadow: 0 6px 16px rgba(110, 110, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
