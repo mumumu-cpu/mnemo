@@ -24,6 +24,6 @@
   ],
   "ai": { "binding": "AI", "remote": true },
   "vars": {
-    "GOOGLE_CLIENT_ID": ""
+    "GOOGLE_CLIENT_ID": "267962789836-utksmf06oed6ougubbl2n58js3iagu1c.apps.googleusercontent.com"
   }
 }
