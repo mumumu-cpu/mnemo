@@ -1,12 +1,43 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { getState, setStatus } from "../store";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
+import { getState, setQA, setStatus, useStore } from "../store";
 import type { Item } from "../types";
 import { burst } from "./Burst";
-import { IconCheck, IconHand, IconRotate, IconX } from "./Icons";
+import { IconCheck, IconHand, IconPen, IconRotate, IconX } from "./Icons";
 import { Img } from "./Img";
 
 type Result = "ok" | "ng";
+type Side = "front" | "back";
+type UpdateCard = (id: string, question: string, answer: string) => void;
+
+const stop = (e: SyntheticEvent) => e.stopPropagation();
+
+/**
+ * Motion listens for tap/drag with native listeners on the card itself, which fire
+ * before React's delegated handlers, so React's stopPropagation alone is too late.
+ * Stop the press natively too, so controls inside the card never flip or drag it.
+ */
+function useNativeStop(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const types = ["pointerdown", "mousedown", "touchstart"] as const;
+    const halt = (e: Event) => e.stopPropagation();
+    types.forEach((t) => el.addEventListener(t, halt));
+    return () => types.forEach((t) => el.removeEventListener(t, halt));
+  }, [ref]);
+}
+
+const isolate = {
+  onPointerDown: stop,
+  onPointerUp: stop,
+  onMouseDown: stop,
+  onTouchStart: stop,
+  onClick: stop,
+  onDoubleClick: stop,
+  onKeyDown: stop,
+  onKeyUp: stop,
+};
 
 export function ReviewDeck({ open, onClose }: { open: boolean; onClose: () => void }) {
   return <AnimatePresence>{open && <Deck onClose={onClose} />}</AnimatePresence>;
@@ -32,9 +63,11 @@ function Deck({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<Result[]>([]);
   const [round, setRound] = useState(0);
   const [dir, setDir] = useState(1);
-  const items = getState().items;
+  const items = useStore((s) => s.items);
   const current = items.find((i) => i.id === queue[0]);
   const upcoming = items.find((i) => i.id === queue[1]);
+
+  const onUpdateCard: UpdateCard = (id, question, answer) => setQA(id, question, answer);
 
   const decide = (r: Result) => {
     if (!current) return;
@@ -96,7 +129,7 @@ function Deck({ onClose }: { onClose: () => void }) {
                   <div className="face glass" />
                 </motion.div>
               )}
-              <FlashCard key={`${round}-${current.id}`} item={current} onDecide={decide} />
+              <FlashCard key={`${round}-${current.id}`} item={current} onDecide={decide} onUpdateCard={onUpdateCard} />
             </AnimatePresence>
           </div>
           <div className="review-actions">
@@ -113,8 +146,9 @@ function Deck({ onClose }: { onClose: () => void }) {
   );
 }
 
-function FlashCard({ item, onDecide }: { item: Item; onDecide: (r: Result) => void }) {
+function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r: Result) => void; onUpdateCard: UpdateCard }) {
   const [flipped, setFlipped] = useState(false);
+  const [editing, setEditing] = useState<Side | null>(null);
   const x = useMotionValue(0);
   const dragged = useRef(0);
   const rotate = useTransform(x, [-300, 300], [-14, 14]);
@@ -124,9 +158,29 @@ function FlashCard({ item, onDecide }: { item: Item; onDecide: (r: Result) => vo
 
   const fling = (r: Result) => onDecide(r);
 
+  const save = (side: Side, text: string) => {
+    const value = text.trim();
+    const question = side === "front" ? value : f.front.trim();
+    const answer = side === "back" ? value : f.back.trim();
+    if (!question) return false;
+    if (question !== (item.question ?? "") || answer !== (item.answer ?? "")) onUpdateCard(item.id, question, answer);
+    setEditing(null);
+    return true;
+  };
+
+  const faceProps = (side: Side) => ({
+    side,
+    value: side === "front" ? f.front : f.back,
+    editing: editing === side,
+    locked: editing !== null && editing !== side,
+    onEdit: () => setEditing(side),
+    onSave: (text: string) => save(side, text),
+    onCancel: () => setEditing(null),
+  });
+
   return (
     <motion.div
-      className="flash"
+      className={`flash${editing ? " is-editing" : ""}`}
       data-testid="flashcard"
       style={{ x, rotate, zIndex: 2 }}
       variants={{
@@ -136,7 +190,7 @@ function FlashCard({ item, onDecide }: { item: Item; onDecide: (r: Result) => vo
       animate={{ scale: 1, y: 0, opacity: 1 }}
       exit="exit"
       transition={{ type: "spring", stiffness: 360, damping: 30 }}
-      drag
+      drag={!editing}
       dragSnapToOrigin
       dragElastic={0.9}
       onDragStart={() => (dragged.current = Date.now())}
@@ -146,34 +200,201 @@ function FlashCard({ item, onDecide }: { item: Item; onDecide: (r: Result) => vo
         else if (i.offset.x < -110 || i.velocity.x < -700) fling("ng");
         else animate(x, 0, { type: "spring", stiffness: 500, damping: 30 });
       }}
-      onTap={() => Date.now() - dragged.current > 300 && setFlipped((v) => !v)}
+      onTap={(e) => {
+        if (editing || Date.now() - dragged.current < 300) return;
+        if ((e.target as Element | null)?.closest?.("[data-no-flip]")) return;
+        setFlipped((v) => !v);
+      }}
     >
       <motion.div className="stamp ok" style={{ opacity: okOpacity }}>覚えた</motion.div>
       <motion.div className="stamp ng" style={{ opacity: ngOpacity }}>もう一度</motion.div>
       <motion.div className="flash-inner" animate={{ rotateY: flipped ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 24 }}>
-        <motion.div className="face front glass strong" data-testid="face-front" animate={{ opacity: flipped ? 0 : 1 }} transition={{ duration: 0.01, delay: 0.1 }}>
+        <motion.div
+          className="face front glass strong"
+          data-testid="face-front"
+          style={{ pointerEvents: flipped ? "none" : "auto" }}
+          animate={{ opacity: flipped ? 0 : 1 }}
+          transition={{ duration: 0.01, delay: 0.1 }}
+        >
           <span className="label">Q</span>
-          {f.frontImage && (
+          {f.frontImage && editing !== "front" && (
             <div className="fimg" style={{ position: "relative" }}>
               <Img k={f.frontImage} />
             </div>
           )}
-          <div className="text">{f.front}</div>
-          <div className="tap">
-            <IconHand />
-          </div>
+          <FaceText {...faceProps("front")} />
+          {editing !== "front" && (
+            <div className="tap">
+              <IconHand />
+            </div>
+          )}
         </motion.div>
-        <motion.div className="face back glass strong" data-testid="face-back" animate={{ opacity: flipped ? 1 : 0 }} transition={{ duration: 0.01, delay: 0.1 }}>
+        <motion.div
+          className="face back glass strong"
+          data-testid="face-back"
+          style={{ pointerEvents: flipped ? "auto" : "none" }}
+          animate={{ opacity: flipped ? 1 : 0 }}
+          transition={{ duration: 0.01, delay: 0.1 }}
+        >
           <span className="label">A</span>
-          {f.backImages[0] && (
+          {f.backImages[0] && editing !== "back" && (
             <div className="fimg" style={{ position: "relative" }}>
               <Img k={f.backImages[0]} />
             </div>
           )}
-          {f.back && <div className={`text${f.back.length > 60 ? " small" : ""}`}>{f.back}</div>}
+          <FaceText {...faceProps("back")} />
         </motion.div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function FaceText({
+  side,
+  value,
+  editing,
+  locked,
+  onEdit,
+  onSave,
+  onCancel,
+}: {
+  side: Side;
+  value: string;
+  editing: boolean;
+  locked: boolean;
+  onEdit: () => void;
+  onSave: (text: string) => boolean;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [shake, setShake] = useState(0);
+  const tools = useRef<HTMLDivElement>(null);
+  const area = useRef<HTMLDivElement>(null);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  useNativeStop(tools);
+  useNativeStop(area);
+
+  useEffect(() => {
+    if (editing) setDraft(value);
+  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The textarea mounts only after the text view has animated out, so focus it on mount.
+  const focusOnMount = useCallback((el: HTMLTextAreaElement | null) => {
+    ta.current = el;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.45)}px`;
+  }, [draft, editing]);
+
+  const commit = () => {
+    if (!onSave(draft)) setShake((n) => n + 1);
+  };
+
+  const label = side === "front" ? "問題" : "回答";
+
+  return (
+    <>
+      <div className="face-tools" ref={tools} data-no-flip {...isolate}>
+        <AnimatePresence mode="popLayout" initial={false}>
+          {editing ? (
+            <motion.button
+              key="save"
+              type="button"
+              className="face-btn save"
+              aria-label={`${label}を保存`}
+              data-testid={`save-${side}`}
+              initial={{ scale: 0.4, opacity: 0, rotate: -45 }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              exit={{ scale: 0.4, opacity: 0 }}
+              whileTap={{ scale: 0.86 }}
+              transition={{ type: "spring", stiffness: 600, damping: 26 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                commit();
+              }}
+            >
+              <IconCheck />
+            </motion.button>
+          ) : (
+            !locked && (
+              <motion.button
+                key="edit"
+                type="button"
+                className="face-btn glass"
+                aria-label={`${label}を編集`}
+                data-testid={`edit-${side}`}
+                initial={{ scale: 0.4, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.4, opacity: 0 }}
+                whileTap={{ scale: 0.86 }}
+                transition={{ type: "spring", stiffness: 600, damping: 26 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+              >
+                <IconPen />
+              </motion.button>
+            )
+          )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        {editing ? (
+          <motion.div
+            key="edit"
+            ref={area}
+            className="face-edit"
+            data-no-flip
+            {...isolate}
+            initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)", x: shake ? [0, -8, 8, -5, 5, 0] : 0 }}
+            exit={{ opacity: 0, y: -6, filter: "blur(6px)" }}
+            transition={{ duration: 0.22 }}
+          >
+            <textarea
+              ref={focusOnMount}
+              value={draft}
+              aria-label={label}
+              data-testid={`input-${side}`}
+              rows={3}
+              onChange={(e) => setDraft(e.target.value)}
+              onPointerDown={stop}
+              onClick={stop}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Escape") onCancel();
+                else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  commit();
+                }
+              }}
+              onKeyUp={stop}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="view"
+            className={`text${value.length > 60 ? " small" : ""}`}
+            data-testid={`text-${side}`}
+            initial={{ opacity: 0, y: -6, filter: "blur(6px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: 8, filter: "blur(6px)" }}
+            transition={{ duration: 0.22 }}
+          >
+            {value}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

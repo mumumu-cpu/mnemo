@@ -318,6 +318,30 @@ textarea { font: inherit; color: inherit; }
 .face .fimg img { max-height: 100%; max-width: 100%; display: block; }
 .face .tap { position: absolute; bottom: 20px; left: 0; right: 0; font-size: 12px; color: var(--ink-3); display: flex; justify-content: center; }
 .face .tap svg { width: 22px; height: 22px; opacity: .5; }
+.face-tools { position: absolute; top: 12px; right: 12px; z-index: 4; height: 40px; display: flex; }
+.face-btn {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2);
+}
+.face-btn svg { width: 17px; height: 17px; }
+.face-btn.save {
+  color: #fff; background: linear-gradient(135deg, #2fd39a, #22b8c3);
+  box-shadow: 0 6px 18px rgba(34, 195, 142, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.flash.is-editing { cursor: default; }
+.face-edit { width: 100%; }
+.face-edit textarea {
+  width: 100%; min-height: 96px; resize: none; border: 0; outline: 0;
+  padding: 16px 18px; border-radius: 22px; text-align: left;
+  font-size: 18px; line-height: 1.6; font-weight: 500; color: var(--ink);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 2px rgba(20, 22, 60, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.9), 0 0 0 0 rgba(111, 141, 255, 0);
+  transition: box-shadow 0.25s, background 0.25s;
+  user-select: text; -webkit-user-select: text; touch-action: auto; cursor: text;
+}
+.face-edit textarea:focus {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 2px rgba(20, 22, 60, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(111, 141, 255, 0.18);
+}
 .stamp {
   position: absolute; top: 34px; padding: 6px 14px; border-radius: 12px; font-weight: 800; font-size: 18px;
   border: 3px solid; z-index: 3; pointer-events: none; background: rgba(255,255,255,.7);

@@ -23,3 +23,4 @@ export const IconLogout = base(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h
 export const IconCloudOff = base(<><path d="M22.6 17.4A5 5 0 0 0 18 10h-1.3A8 8 0 0 0 7 5.3" /><path d="M5 5a8 8 0 0 0 4 15h9a5 5 0 0 0 1.7-.3M2 2l20 20" /></>);
 export const IconUser = base(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>);
 export const IconHand = base(<path d="M9 11V5a1.5 1.5 0 0 1 3 0v5m0-1V4a1.5 1.5 0 0 1 3 0v6m0-1a1.5 1.5 0 0 1 3 0v5a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3.3 15a1.5 1.5 0 0 1 2.4-1.8L9 16" />);
+export const IconPen = base(<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>);
