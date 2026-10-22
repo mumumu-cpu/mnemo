@@ -10,6 +10,8 @@ export type Item = {
   /** Images on the card's front / back; may reuse keys from `images`. Unset falls back to the memo's images. */
   questionImages?: string[] | null;
   answerImages?: string[] | null;
+  /** The file (deck) this memo belongs to, or null. */
+  deckId?: string | null;
   reviews: number;
   createdAt: number;
   updatedAt: number;
@@ -23,3 +25,5 @@ export const STATUS = [
   { label: "学習中", color: "var(--s1)" },
   { label: "覚えた", color: "var(--s2)" },
 ] as const;
+
+export type Deck = { id: string; name: string; createdAt: number };

@@ -1,10 +1,11 @@
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { imagesFrom } from "../image";
-import { addImages, removeItem, runAI, setBody, setQA, setStatus, useStore } from "../store";
+import { addImages, moveItems, removeItem, runAI, setAnswer, setBody, setStatus, useStore } from "../store";
 import { STATUS, type Status } from "../types";
 import { burst } from "./Burst";
-import { IconImage, IconList, IconSpark, IconTrash } from "./Icons";
+import { DeckPicker } from "./DeckSheets";
+import { IconFolder, IconImage, IconList, IconTrash } from "./Icons";
 import { Img } from "./Img";
 import { QAField } from "./QAField";
 
@@ -25,12 +26,13 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
   if (live) last.current = live;
   const item = live ?? last.current;
   const [text, setText] = useState(item?.body ?? "");
-  const [busy, setBusy] = useState<null | "quiz" | "summary">(null);
+  const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const controls = useDragControls();
   const saved = useRef(item?.body ?? "");
   const [uploading, setUploading] = useState(0);
-  const [aiRuns, setAiRuns] = useState(0);
+  const [picking, setPicking] = useState(false);
+  const deckName = useStore((s) => s.decks.find((d) => d.id === live?.deckId)?.name);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Debounced autosave; no save button needed.
@@ -68,15 +70,13 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
     setUploading((n) => n - picked.length);
   };
 
-  // Same image rules as the review card, so what's edited here is what the card shows.
-  const questionImages = item.questionImages ?? [];
-  const answerImages = item.answerImages ?? item.images.slice(0, 1);
+  // The memo above is the card's question; only the answer lives here.
+  const answerImages = item.answerImages ?? [];
 
-  const ai = async (mode: "quiz" | "summary") => {
-    setBusy(mode);
-    const res = await runAI(id, mode);
-    setBusy(null);
-    if (mode === "quiz" && res?.item) setAiRuns((n) => n + 1);
+  const summarize = async () => {
+    setBusy(true);
+    const res = await runAI(id, "summary");
+    setBusy(false);
     if (res?.summary) setSummary(res.summary);
   };
 
@@ -102,8 +102,10 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
           <div className="grab" />
         </div>
         <div className="sheet-scroll">
+          <h4 className="first">Q</h4>
           <textarea
             aria-label="メモ本文"
+            placeholder="問題"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onPaste={(e) => {
@@ -165,6 +167,23 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
             />
           </div>
 
+          <h4>A</h4>
+          <QAField
+            itemId={id}
+            label="A"
+            testId="qa-answer"
+            value={item.answer ?? ""}
+            images={answerImages}
+            placeholder="回答を入力"
+            onSave={(a, imgs) => setAnswer(id, a, sameKeys(imgs, answerImages) ? undefined : imgs)}
+          />
+
+          <h4>ファイル</h4>
+          <motion.button className="deck-row in-sheet" data-testid="sheet-deck" whileTap={{ scale: 0.97 }} onClick={() => setPicking(true)}>
+            <IconFolder />
+            <span className="deck-row-name">{deckName ?? "なし"}</span>
+          </motion.button>
+
           <h4>ステータス</h4>
           <div className="status-pick">
             {STATUS.map((s, i) => (
@@ -197,42 +216,15 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
           </div>
 
           <h4>AI</h4>
-          <div className="ai-row">
-            <motion.button className={`ai-btn${busy === "quiz" ? " busy" : ""}`} disabled={!!busy} whileTap={{ scale: 0.96 }} onClick={() => ai("quiz")}>
-              {busy === "quiz" ? <span className="spinner" /> : <IconSpark />} 問題を作る
-            </motion.button>
-            <motion.button className={`ai-btn${busy === "summary" ? " busy" : ""}`} disabled={!!busy} whileTap={{ scale: 0.96 }} onClick={() => ai("summary")}>
-              {busy === "summary" ? <span className="spinner" /> : <IconList />} 要点
-            </motion.button>
-          </div>
-
+          <motion.button className={`ai-btn wide${busy ? " busy" : ""}`} data-testid="ai-summary-btn" disabled={busy} whileTap={{ scale: 0.97 }} onClick={summarize}>
+            {busy ? <span className="spinner" /> : <IconList />} 要点
+          </motion.button>
           <AnimatePresence mode="popLayout">
             {busy && (
               <motion.div key="ai-skel" className="skel" style={{ padding: "14px 4px 0" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <b style={{ width: "70%" }} />
                 <b style={{ width: "92%" }} />
                 <b style={{ width: "55%" }} />
-              </motion.div>
-            )}
-            {!busy && (item.question || item.questionImages?.length) && (
-              <motion.div key={`qa-${aiRuns}`} style={{ marginTop: 12 }} initial={{ opacity: 0, y: 10, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}>
-                <QAField
-                  itemId={id}
-                  label="Q"
-                  testId="qa-question"
-                  value={item.question ?? ""}
-                  images={questionImages}
-                  required
-                  onSave={(q, imgs) => setQA(id, q, item.answer ?? "", sameKeys(imgs, questionImages) ? undefined : imgs)}
-                />
-                <QAField
-                  itemId={id}
-                  label="A"
-                  testId="qa-answer"
-                  value={item.answer ?? ""}
-                  images={answerImages}
-                  onSave={(a, imgs) => setQA(id, item.question ?? "", a, undefined, sameKeys(imgs, answerImages) ? undefined : imgs)}
-                />
               </motion.div>
             )}
             {!busy && summary && (
@@ -255,6 +247,16 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
           </motion.button>
         </div>
       </motion.div>
+      <DeckPicker
+        open={picking}
+        title="ファイルへ移動"
+        current={item.deckId ?? null}
+        onClose={() => setPicking(false)}
+        onPick={(target) => {
+          moveItems([id], target);
+          setPicking(false);
+        }}
+      />
     </>
   );
 }

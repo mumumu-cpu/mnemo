@@ -1,11 +1,11 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { imagesFrom } from "../image";
-import { getState, setQA, setStatus, useStore } from "../store";
+import { getState, setAnswer, setMemo, setStatus, useStore } from "../store";
 import type { Item } from "../types";
 import { burst } from "./Burst";
 import { DraftThumbs, useDraftImages } from "./DraftImages";
-import { IconCheck, IconHand, IconImage, IconPen, IconRotate, IconX } from "./Icons";
+import { IconCheck, IconFolder, IconHand, IconImage, IconPen, IconRotate, IconX } from "./Icons";
 import { Img } from "./Img";
 
 type Result = "ok" | "ng";
@@ -44,31 +44,27 @@ const isolate = {
   onKeyUp: stop,
 };
 
-export function ReviewDeck({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return <AnimatePresence>{open && <Deck onClose={onClose} />}</AnimatePresence>;
+export function ReviewDeck({ open, deckId, onClose }: { open: boolean; deckId: string | null; onClose: () => void }) {
+  return <AnimatePresence>{open && <Deck deckId={deckId} onClose={onClose} />}</AnimatePresence>;
 }
 
+/** Cards still to memorise, limited to one file when `deckId` is set. */
+const dueIn = (items: Item[], deckId: string | null) => items.filter((i) => i.status !== 2 && (!deckId || i.deckId === deckId));
+
+/** The memo is the question; the answer is added separately. */
 function faces(it: Item) {
-  const memoImage = it.images.slice(0, 1);
-  const backImages = it.answerImages ?? memoImage;
-  if (it.question || it.questionImages?.length) {
-    return { front: it.question ?? "", back: it.answer ?? "", frontImages: it.questionImages ?? [], backImages };
-  }
-  const [first, ...rest] = it.body.split("\n");
-  const restText = rest.join("\n").trim();
-  if (restText) return { front: first, back: restText, frontImages: it.questionImages ?? [], backImages };
-  return { front: it.body, back: "", frontImages: it.questionImages ?? (it.body ? [] : memoImage), backImages };
+  return { front: it.body, back: it.answer ?? "", frontImages: it.images, backImages: it.answerImages ?? [] };
 }
 
-function Deck({ onClose }: { onClose: () => void }) {
+function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void }) {
+  const deckName = useStore((s) => s.decks.find((d) => d.id === deckId)?.name);
   // Snapshot the queue: everything not yet memorised, oldest-reviewed first.
   const [queue, setQueue] = useState(() =>
-    getState()
-      .items.filter((i) => i.status !== 2)
+    dueIn(getState().items, deckId)
       .sort((a, b) => a.reviews - b.reviews || a.createdAt - b.createdAt)
       .map((i) => i.id),
   );
-  const total = useMemo(() => queue.length, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [total, setTotal] = useState(queue.length);
   const [results, setResults] = useState<Result[]>([]);
   const [round, setRound] = useState(0);
   const [dir, setDir] = useState(1);
@@ -76,8 +72,12 @@ function Deck({ onClose }: { onClose: () => void }) {
   const current = items.find((i) => i.id === queue[0]);
   const upcoming = items.find((i) => i.id === queue[1]);
 
-  const onUpdateCard: UpdateCard = (id, question, answer, questionImages, answerImages) =>
-    setQA(id, question, answer, questionImages, answerImages);
+  const onUpdateCard: UpdateCard = (id, question, answer, questionImages, answerImages) => {
+    const it = getState().items.find((i) => i.id === id);
+    if (!it) return;
+    if (question !== it.body || questionImages) setMemo(id, question, questionImages);
+    if (answer !== (it.answer ?? "") || answerImages) setAnswer(id, answer, answerImages);
+  };
 
   const decide = (r: Result) => {
     if (!current) return;
@@ -118,6 +118,12 @@ function Deck({ onClose }: { onClose: () => void }) {
         <div className="progress">
           <motion.div animate={{ width: `${total ? (done / total) * 100 : 100}%` }} transition={{ type: "spring", stiffness: 200, damping: 30 }} />
         </div>
+        {deckName && (
+          <span className="review-deck" data-testid="review-deck">
+            <IconFolder />
+            {deckName}
+          </span>
+        )}
         <span className="review-count" data-testid="review-count">
           {Math.min(done + (finished ? 0 : 1), total)}/{total}
         </span>
@@ -125,11 +131,12 @@ function Deck({ onClose }: { onClose: () => void }) {
 
       {finished ? (
         <Done ok={ok} ng={done - ok} total={total} onClose={onClose} onAgain={() => {
-          const again = getState().items.filter((i) => i.status !== 2).map((i) => i.id);
+          const again = dueIn(getState().items, deckId).map((i) => i.id);
           setQueue(again);
+          setTotal(again.length);
           setResults([]);
           setRound((r) => r + 1);
-        }} canAgain={getState().items.some((i) => i.status !== 2)} />
+        }} canAgain={dueIn(getState().items, deckId).length > 0} />
       ) : (
         <>
           <div className="deck">
@@ -170,17 +177,15 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
 
   const save = (side: Side, text: string, images: string[]) => {
     const value = text.trim();
-    const question = side === "front" ? value : f.front.trim();
-    const answer = side === "back" ? value : f.back.trim();
-    const frontImages = side === "front" ? images : f.frontImages;
-    if (!question && !frontImages.length) return false;
     const before = side === "front" ? f.frontImages : f.backImages;
+    if (side === "front" && !value && !images.length) return false;
     const imagesChanged = images.length !== before.length || images.some((k, i) => k !== before[i]);
-    if (question !== (item.question ?? "") || answer !== (item.answer ?? "") || imagesChanged) {
+    const textChanged = value !== (side === "front" ? f.front : f.back).trim();
+    if (textChanged || imagesChanged) {
       onUpdateCard(
         item.id,
-        question,
-        answer,
+        side === "front" ? value : item.body,
+        side === "back" ? value : item.answer ?? "",
         side === "front" && imagesChanged ? images : undefined,
         side === "back" && imagesChanged ? images : undefined,
       );
@@ -298,7 +303,8 @@ function FaceText({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(value);
-  const draftImages = useDraftImages(itemId);
+  // The front is the memo itself, which can hold more images than an answer.
+  const draftImages = useDraftImages(itemId, side === "front" ? 12 : undefined);
   const [shake, setShake] = useState(0);
   const tools = useNativeStop<HTMLDivElement>();
   const area = useNativeStop<HTMLDivElement>();

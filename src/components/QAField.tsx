@@ -12,7 +12,7 @@ export function QAField({
   testId,
   value,
   images,
-  required,
+  placeholder,
   onSave,
 }: {
   itemId: string;
@@ -20,16 +20,16 @@ export function QAField({
   testId: string;
   value: string;
   images: string[];
-  required?: boolean;
+  placeholder: string;
   onSave: (text: string, images: string[]) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  const [shake, setShake] = useState(0);
   const draftImages = useDraftImages(itemId);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const name = label === "Q" ? "問題" : "回答";
+  const empty = !value && !images.length;
 
   useEffect(() => {
     if (!editing) return;
@@ -55,10 +55,6 @@ export function QAField({
     if (draftImages.uploading) return;
     const text = draft.trim();
     const keys = draftImages.keys();
-    if (required && !text && !keys.length) {
-      setShake((n) => n + 1);
-      return;
-    }
     const changed = text !== value || keys.length !== images.length || keys.some((k, i) => k !== images[i]);
     if (changed) onSave(text, keys);
     setEditing(false);
@@ -66,11 +62,11 @@ export function QAField({
 
   return (
     <motion.div
-      className={`qa-box qa-field${editing ? " editing" : ""}`}
+      className={`qa-box qa-field${editing ? " editing" : ""}${empty && !editing ? " empty" : ""}`}
       data-testid={testId}
       layout
-      animate={{ x: shake ? [0, -8, 8, -5, 5, 0] : 0 }}
-      transition={{ layout: { type: "spring", stiffness: 500, damping: 38 }, x: { duration: 0.3 } }}
+      transition={{ layout: { type: "spring", stiffness: 500, damping: 38 } }}
+      onClick={() => !editing && empty && setEditing(true)}
       onDragOver={(e) => editing && e.preventDefault()}
       onDrop={(e) => {
         if (!editing) return;
@@ -79,7 +75,7 @@ export function QAField({
       }}
     >
       <div className="qa-head">
-        <small>{label}</small>
+        {label === "Q" ? <small>Q</small> : <span />}
         <AnimatePresence mode="popLayout" initial={false}>
           {editing ? (
             <motion.div key="editing" className="qa-tools" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>
@@ -117,7 +113,7 @@ export function QAField({
                 }}
               />
             </motion.div>
-          ) : (
+          ) : empty ? null : (
             <motion.button
               key="edit"
               type="button"
@@ -128,7 +124,10 @@ export function QAField({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.6 }}
               whileTap={{ scale: 0.86 }}
-              onClick={() => setEditing(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditing(true);
+              }}
             >
               <IconPen />
             </motion.button>
@@ -143,6 +142,7 @@ export function QAField({
             <textarea
               ref={focusOnMount}
               className="qa-input"
+              placeholder={placeholder}
               aria-label={name}
               data-testid={`${testId}-input`}
               value={draft}
@@ -176,8 +176,8 @@ export function QAField({
                 ))}
               </div>
             )}
-            <div className="qa-text" data-testid={`${testId}-text`}>
-              {value}
+            <div className={`qa-text${empty ? " placeholder" : ""}`} data-testid={`${testId}-text`}>
+              {empty ? placeholder : value}
             </div>
           </motion.div>
         )}

@@ -1,4 +1,4 @@
-import type { Item, User } from "./types";
+import type { Deck, Item, User } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -31,10 +31,15 @@ export const api = {
   dev: () => req<{ user: User }>("/auth/dev", { method: "POST" }),
   logout: () => req<{ ok: true }>("/auth/logout", { method: "POST" }),
   items: () => req<{ items: Item[] }>("/items"),
-  create: (b: { id: string; body: string; images: string[]; createdAt: number; status: number }) =>
+  create: (b: { id: string; body: string; images: string[]; createdAt: number; status: number; deckId?: string | null }) =>
     req<{ item: Item }>("/items", json("POST", b)),
   patch: (id: string, b: Record<string, unknown>) => req<{ item: Item }>(`/items/${id}`, json("PATCH", b)),
   remove: (id: string) => req<{ ok: true }>(`/items/${id}`, { method: "DELETE" }),
+  decks: () => req<{ decks: Deck[] }>("/decks"),
+  createDeck: (b: { id: string; name: string }) => req<{ deck: Deck }>("/decks", json("POST", b)),
+  renameDeck: (id: string, name: string) => req<{ deck: Deck }>(`/decks/${id}`, json("PATCH", { name })),
+  removeDeck: (id: string) => req<{ ok: true }>(`/decks/${id}`, { method: "DELETE" }),
+  move: (ids: string[], deckId: string | null) => req<{ ok: true }>("/items/move", json("POST", { ids, deckId })),
   upload: (blob: Blob) =>
     req<{ key: string }>("/images", { method: "POST", headers: { "content-type": blob.type }, body: blob }),
   ai: (id: string, mode: "quiz" | "summary") =>

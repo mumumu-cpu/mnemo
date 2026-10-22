@@ -7,7 +7,7 @@ import { IconImage, IconUp, IconX } from "./Icons";
 type Draft = { id: string; file: File; url: string };
 const DRAFT_KEY = "mnemo-draft";
 
-export function Composer() {
+export function Composer({ deckId = null }: { deckId?: string | null }) {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY) ?? "";
@@ -63,7 +63,7 @@ export function Composer() {
 
   const submit = () => {
     if (!canSend) return;
-    addItem(text.trim(), imgs.map((d) => d.file));
+    addItem(text.trim(), imgs.map((d) => d.file), deckId);
     navigator.vibrate?.(8);
     setText("");
     setImgs([]);

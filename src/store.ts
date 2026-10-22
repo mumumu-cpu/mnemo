@@ -2,7 +2,7 @@ import { get, set, del } from "idb-keyval";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, ApiError } from "./api";
 import { compressImage } from "./image";
-import type { Item, Status, User } from "./types";
+import type { Deck, Item, Status, User } from "./types";
 
 type State = {
   auth: "loading" | "in" | "out";
@@ -10,6 +10,7 @@ type State = {
   googleClientId: string | null;
   devAuth: boolean;
   items: Item[];
+  decks: Deck[];
   /** true once we have something to show (cache or server). Drives skeletons. */
   ready: boolean;
   syncing: boolean;
@@ -22,6 +23,7 @@ let state: State = {
   googleClientId: null,
   devAuth: false,
   items: [],
+  decks: [],
   ready: false,
   syncing: false,
   toast: null,
@@ -55,6 +57,7 @@ export const dismissToast = () => setState({ toast: null });
 // ---------- persistence ----------
 
 const CACHE_KEY = "items-v1";
+const DECKS_KEY = "decks-v1";
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 function persist() {
   clearTimeout(persistTimer);
@@ -64,6 +67,11 @@ function persist() {
 function setItems(fn: (items: Item[]) => Item[]) {
   setState((s) => ({ items: fn(s.items) }));
   persist();
+}
+
+function setDecks(fn: (decks: Deck[]) => Deck[]) {
+  setState((s) => ({ decks: fn(s.decks) }));
+  set(DECKS_KEY, state.decks).catch(() => {});
 }
 
 const patchItem = (id: string, patch: Partial<Item>) =>
@@ -102,7 +110,11 @@ export function useImageSrc(key: string) {
 // ---------- boot & sync ----------
 
 export async function boot() {
-  const cached = await get<Item[]>(CACHE_KEY).catch(() => undefined);
+  const [cached, cachedDecks] = await Promise.all([
+    get<Item[]>(CACHE_KEY).catch(() => undefined),
+    get<Deck[]>(DECKS_KEY).catch(() => undefined),
+  ]);
+  if (cachedDecks?.length) setState({ decks: cachedDecks });
   if (cached?.length) setState({ items: cached, ready: true });
 
   const [cfg, me] = await Promise.allSettled([api.config(), api.me()]);
@@ -113,7 +125,10 @@ export async function boot() {
   } else {
     // Signed out: only unsynced local memos belong on this device. If the
     // server was unreachable, keep showing the cache instead.
-    if (me.status === "fulfilled") setItems((items) => items.filter((i) => i.pending));
+    if (me.status === "fulfilled") {
+      setItems((items) => items.filter((i) => i.pending));
+      setDecks(() => []);
+    }
     setState({ auth: "out", user: null, ready: true });
   }
 }
@@ -121,8 +136,11 @@ export async function boot() {
 export async function sync() {
   setState({ syncing: true });
   try {
-    const { items } = await api.items();
-    setItems((cur) => [...cur.filter((i) => i.pending), ...items]);
+    const [{ items }, { decks }] = await Promise.all([api.items(), api.decks()]);
+    setDecks(() => decks);
+    // A file picked for an unsynced memo while signed out can't exist on the server.
+    const known = new Set(decks.map((d) => d.id));
+    setItems((cur) => [...cur.filter((i) => i.pending).map((i) => (i.deckId && !known.has(i.deckId) ? { ...i, deckId: null } : i)), ...items]);
     setState({ ready: true });
     await flush();
   } catch (e) {
@@ -163,11 +181,12 @@ async function flush() {
         return out;
       };
       const keys = await upload(it.images);
-      const { item } = await api.create({ id: it.id, body: it.body, images: keys, createdAt: it.createdAt, status: it.status });
+      const { item } = await api.create({ id: it.id, body: it.body, images: keys, createdAt: it.createdAt, status: it.status, deckId: it.deckId ?? null });
       // The user may have edited the memo (or its card) while it was uploading.
       const latest = state.items.find((i) => i.id === it.id) ?? it;
       const extra: Record<string, unknown> = {};
       if (latest.body !== item.body) extra.body = latest.body;
+      if ((latest.deckId ?? null) !== (item.deckId ?? null)) extra.deckId = latest.deckId ?? null;
       if (latest.images.length !== it.images.length || latest.images.some((k, i) => k !== it.images[i])) extra.images = await upload(latest.images);
       if (latest.question) extra.question = latest.question;
       if (latest.answer) extra.answer = latest.answer;
@@ -221,12 +240,13 @@ export async function signInDev() {
 export async function signOut() {
   await api.logout().catch(() => {});
   setItems((items) => items.filter((i) => i.pending));
+  setDecks(() => []);
   setState({ auth: "out", user: null });
 }
 
 // ---------- mutations ----------
 
-export async function addItem(body: string, files: Blob[]) {
+export async function addItem(body: string, files: Blob[], deckId: string | null = null) {
   const id = crypto.randomUUID();
   const images: string[] = [];
   for (const f of files) {
@@ -236,7 +256,7 @@ export async function addItem(body: string, files: Blob[]) {
     set(`blob:${key}`, f).catch(() => {});
   }
   const now = Date.now();
-  const item: Item = { id, body, images, status: 0, question: null, answer: null, reviews: 0, createdAt: now, updatedAt: now, pending: true };
+  const item: Item = { id, body, images, status: 0, question: null, answer: null, deckId, reviews: 0, createdAt: now, updatedAt: now, pending: true };
   setItems((items) => [item, ...items]);
   if (!files.length) {
     flush();
@@ -278,6 +298,13 @@ export const setStatus = (id: string, status: Status, reviewed = false) =>
   );
 
 export const setBody = (id: string, body: string) => mutate(id, { body }, { body });
+
+/** The memo is the card's question: its text and images. */
+export const setMemo = (id: string, body: string, images?: string[]) =>
+  mutate(id, { body, ...(images && { images }) }, { body, ...(images && { images }) });
+
+export const setAnswer = (id: string, answer: string, answerImages?: string[]) =>
+  mutate(id, { answer, ...(answerImages && { answerImages }) }, { answer, ...(answerImages && { answerImages }) });
 
 export const setQA = (id: string, question: string, answer: string, questionImages?: string[], answerImages?: string[]) =>
   mutate(
@@ -323,6 +350,71 @@ export async function addImages(id: string, files: Blob[]) {
   if (!it || !keys?.length) return;
   const images = [...it.images, ...keys].slice(0, 12);
   return mutate(id, { images }, { images });
+}
+
+// ---------- files (decks) ----------
+
+export async function createDeck(name: string): Promise<string | null> {
+  const clean = name.trim().slice(0, 60);
+  if (!clean) return null;
+  if (state.auth !== "in") {
+    toast("ログインするとファイルを作れます");
+    return null;
+  }
+  const deck: Deck = { id: crypto.randomUUID(), name: clean, createdAt: Date.now() };
+  setDecks((d) => [...d, deck]);
+  try {
+    await api.createDeck({ id: deck.id, name: clean });
+    return deck.id;
+  } catch (e) {
+    setDecks((d) => d.filter((x) => x.id !== deck.id));
+    handleError(e);
+    return null;
+  }
+}
+
+export async function renameDeck(id: string, name: string) {
+  const clean = name.trim().slice(0, 60);
+  const before = state.decks.find((d) => d.id === id);
+  if (!clean || !before || clean === before.name) return;
+  setDecks((d) => d.map((x) => (x.id === id ? { ...x, name: clean } : x)));
+  try {
+    await api.renameDeck(id, clean);
+  } catch (e) {
+    setDecks((d) => d.map((x) => (x.id === id ? before : x)));
+    handleError(e);
+  }
+}
+
+/** Deletes the file only; its memos stay and simply leave the file. */
+export async function removeDeck(id: string) {
+  const deck = state.decks.find((d) => d.id === id);
+  if (!deck) return;
+  const members = state.items.filter((i) => i.deckId === id).map((i) => i.id);
+  setDecks((d) => d.filter((x) => x.id !== id));
+  setItems((items) => items.map((i) => (i.deckId === id ? { ...i, deckId: null } : i)));
+  try {
+    await api.removeDeck(id);
+  } catch (e) {
+    setDecks((d) => [...d, deck].sort((a, b) => a.createdAt - b.createdAt));
+    setItems((items) => items.map((i) => (members.includes(i.id) ? { ...i, deckId: id } : i)));
+    handleError(e);
+  }
+}
+
+export async function moveItems(ids: string[], deckId: string | null) {
+  const before = new Map(state.items.filter((i) => ids.includes(i.id)).map((i) => [i.id, i.deckId ?? null]));
+  if (!before.size) return;
+  setItems((items) => items.map((i) => (before.has(i.id) ? { ...i, deckId, updatedAt: Date.now() } : i)));
+  // Unsynced memos carry their file with them on first sync.
+  const synced = [...before.keys()].filter((id) => !state.items.find((i) => i.id === id)?.pending);
+  if (!synced.length || state.auth !== "in") return;
+  try {
+    await api.move(synced, deckId);
+  } catch (e) {
+    setItems((items) => items.map((i) => (before.has(i.id) ? { ...i, deckId: before.get(i.id)! } : i)));
+    handleError(e);
+  }
 }
 
 const UNDO_MS = 4000;
