@@ -31,7 +31,7 @@ export const api = {
   dev: () => req<{ user: User }>("/auth/dev", { method: "POST" }),
   logout: () => req<{ ok: true }>("/auth/logout", { method: "POST" }),
   items: () => req<{ items: Item[] }>("/items"),
-  create: (b: { id: string; body: string; images: string[]; createdAt: number; status: number; deckId?: string | null }) =>
+  create: (b: { id: string; body: string; images: string[]; createdAt: number; status: number; deckId?: string | null; answer?: string }) =>
     req<{ item: Item }>("/items", json("POST", b)),
   patch: (id: string, b: Record<string, unknown>) => req<{ item: Item }>(`/items/${id}`, json("PATCH", b)),
   remove: (id: string) => req<{ ok: true }>(`/items/${id}`, { method: "DELETE" }),

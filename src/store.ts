@@ -185,7 +185,7 @@ async function flush() {
         return out;
       };
       const keys = await upload(it.images);
-      const { item } = await api.create({ id: it.id, body: it.body, images: keys, createdAt: it.createdAt, status: it.status, deckId: it.deckId ?? null });
+      const { item } = await api.create({ id: it.id, body: it.body, images: keys, createdAt: it.createdAt, status: it.status, deckId: it.deckId ?? null, answer: it.answer ?? "" });
       // The user may have edited the memo (or its card) while it was uploading.
       const latest = state.items.find((i) => i.id === it.id) ?? it;
       const extra: Record<string, unknown> = {};
@@ -194,7 +194,7 @@ async function flush() {
       if (latest.marked) extra.marked = true;
       if (latest.images.length !== it.images.length || latest.images.some((k, i) => k !== it.images[i])) extra.images = await upload(latest.images);
       if (latest.question) extra.question = latest.question;
-      if (latest.answer) extra.answer = latest.answer;
+      if ((latest.answer ?? "") !== (item.answer ?? "")) extra.answer = latest.answer ?? "";
       if (latest.questionImages) extra.questionImages = await upload(latest.questionImages);
       if (latest.answerImages) extra.answerImages = await upload(latest.answerImages);
       let synced = item;
@@ -251,7 +251,7 @@ export async function signOut() {
 
 // ---------- mutations ----------
 
-export async function addItem(body: string, files: Blob[], deckId: string | null = null) {
+export async function addItem(body: string, files: Blob[], deckId: string | null = null, answer = "") {
   const id = crypto.randomUUID();
   const images: string[] = [];
   for (const f of files) {
@@ -261,7 +261,7 @@ export async function addItem(body: string, files: Blob[], deckId: string | null
     set(`blob:${key}`, f).catch(() => {});
   }
   const now = Date.now();
-  const item: Item = { id, body, images, status: 0, question: null, answer: null, deckId, reviews: 0, createdAt: now, updatedAt: now, pending: true };
+  const item: Item = { id, body, images, status: 0, question: null, answer: answer || null, deckId, reviews: 0, createdAt: now, updatedAt: now, pending: true };
   setItems((items) => [item, ...items]);
   if (!files.length) {
     flush();

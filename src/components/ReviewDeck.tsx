@@ -1,9 +1,10 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { imagesFrom } from "../image";
 import { getState, setAnswer, setMarked, setMemo, setStatus, useStore } from "../store";
 import type { Item } from "../types";
 import { burst } from "./Burst";
+import { isolate, stop, useNativeStop } from "../isolate";
 import { DraftThumbs, useDraftImages } from "./DraftImages";
 import { IconCheck, IconFlag, IconFolder, IconHand, IconImage, IconPen, IconRotate, IconShuffle, IconX } from "./Icons";
 import { Img } from "./Img";
@@ -12,37 +13,7 @@ type Result = "ok" | "ng";
 type Side = "front" | "back";
 type UpdateCard = (id: string, question: string, answer: string, questionImages?: string[], answerImages?: string[]) => void;
 
-const stop = (e: SyntheticEvent) => e.stopPropagation();
 
-/**
- * Motion listens for tap/drag with native listeners on the card itself, which fire
- * before React's delegated handlers, so React's stopPropagation alone is too late.
- * Stop the press natively too, so controls inside the card never flip or drag it.
- */
-function useNativeStop<T extends HTMLElement>() {
-  const cleanup = useRef<(() => void) | null>(null);
-  // A callback ref, so listeners attach even when the element mounts late (after an exit animation).
-  return useCallback((el: T | null) => {
-    cleanup.current?.();
-    cleanup.current = null;
-    if (!el) return;
-    const types = ["pointerdown", "mousedown", "touchstart"] as const;
-    const halt = (e: Event) => e.stopPropagation();
-    types.forEach((t) => el.addEventListener(t, halt));
-    cleanup.current = () => types.forEach((t) => el.removeEventListener(t, halt));
-  }, []);
-}
-
-const isolate = {
-  onPointerDown: stop,
-  onPointerUp: stop,
-  onMouseDown: stop,
-  onTouchStart: stop,
-  onClick: stop,
-  onDoubleClick: stop,
-  onKeyDown: stop,
-  onKeyUp: stop,
-};
 
 export function ReviewDeck({ open, deckId, onClose }: { open: boolean; deckId: string | null; onClose: () => void }) {
   return <AnimatePresence>{open && <Deck deckId={deckId} onClose={onClose} />}</AnimatePresence>;

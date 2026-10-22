@@ -1,8 +1,9 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { forwardRef, useRef } from "react";
+import { forwardRef, useRef, useState } from "react";
 import { setStatus } from "../store";
 import { STATUS, type Item, type Status } from "../types";
 import { burst } from "./Burst";
+import { CardAnswer } from "./CardAnswer";
 import { IconArrowL, IconArrowR, IconCheck, IconCloudOff, IconFlag, IconFolder, IconSpark } from "./Icons";
 import { Img } from "./Img";
 
@@ -35,6 +36,7 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
     const x = useMotionValue(0);
     const cardRef = useRef<HTMLDivElement>(null);
     const dragged = useRef(0);
+    const [answering, setAnswering] = useState(false);
     const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
     const cancelPress = () => {
       if (press.current) clearTimeout(press.current.timer);
@@ -94,7 +96,7 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
           data-testid="item-card"
           data-status={item.status}
           style={{ x, rotate }}
-          drag={selecting ? false : "x"}
+          drag={selecting || answering ? false : "x"}
           dragDirectionLock
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={{ left: canPrev ? 0.9 : 0.12, right: canNext ? 0.9 : 0.12 }}
@@ -153,6 +155,7 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
             )}
           </AnimatePresence>
           <div className="card-body">{item.body}</div>
+          <CardAnswer item={item} selecting={selecting} onEditing={setAnswering} />
           {item.images.length > 0 && (
             <div className={`card-imgs${item.body ? "" : " solo"}`}>
               {item.images.slice(0, 4).map((k) => (
@@ -189,9 +192,9 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
                 <IconFolder /> {deckName}
               </span>
             )}
-            {!!(item.answer || item.answerImages?.length) && (
+            {!item.answer && !!item.answerImages?.length && (
               <span className="qa-hint">
-                <IconSpark /> 回答あり
+                <IconSpark /> 解答画像あり
               </span>
             )}
             <span style={{ flex: 1 }} />

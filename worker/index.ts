@@ -171,7 +171,8 @@ app.get("/items", async (c) => {
 });
 
 app.post("/items", async (c) => {
-  const b = await c.req.json<{ id?: string; body?: string; images?: string[]; createdAt?: number; status?: number; deckId?: string | null }>();
+  const b = await c.req.json<{ id?: string; body?: string; images?: string[]; createdAt?: number; status?: number; deckId?: string | null; answer?: string }>();
+  const answer = typeof b.answer === "string" && b.answer.trim() ? b.answer.slice(0, 4000) : null;
   const deckId = await ownDeck(c.env, c.get("uid"), b.deckId);
   const status = [0, 1, 2].includes(b.status as number) ? (b.status as number) : 0;
   const id = b.id && /^[\w-]{8,64}$/.test(b.id) ? b.id : crypto.randomUUID();
@@ -179,10 +180,10 @@ app.post("/items", async (c) => {
   const now = Date.now();
   const created = Math.min(b.createdAt ?? now, now);
   await c.env.DB.prepare(
-    `INSERT INTO items (id, user_id, body, images, status, created_at, updated_at, deck_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(id) DO NOTHING`,
+    `INSERT INTO items (id, user_id, body, images, status, created_at, updated_at, deck_id, answer)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT(id) DO NOTHING`,
   )
-    .bind(id, c.get("uid"), (b.body ?? "").slice(0, 20000), JSON.stringify(images), status, created, now, deckId)
+    .bind(id, c.get("uid"), (b.body ?? "").slice(0, 20000), JSON.stringify(images), status, created, now, deckId, answer)
     .run();
   const row = await c.env.DB.prepare("SELECT * FROM items WHERE id = ? AND user_id = ?")
     .bind(id, c.get("uid"))
