@@ -3,7 +3,7 @@ import { forwardRef, useRef } from "react";
 import { setStatus } from "../store";
 import { STATUS, type Item, type Status } from "../types";
 import { burst } from "./Burst";
-import { IconArrowL, IconArrowR, IconCheck, IconCloudOff, IconFolder, IconSpark } from "./Icons";
+import { IconArrowL, IconArrowR, IconCheck, IconCloudOff, IconFlag, IconFolder, IconSpark } from "./Icons";
 import { Img } from "./Img";
 
 const THRESHOLD = 88;
@@ -168,6 +168,22 @@ export const ItemCard = forwardRef<HTMLDivElement, CardProps>(
               <i style={{ background: s.color }} />
               {s.label}
             </motion.span>
+            <AnimatePresence initial={false}>
+              {item.marked && (
+                <motion.span
+                  className="mark-chip"
+                  data-testid="list-mark"
+                  aria-label="印あり"
+                  title="印あり"
+                  initial={{ scale: 0, rotate: -30 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  exit={{ scale: 0 }}
+                  transition={{ type: "spring", stiffness: 600, damping: 20 }}
+                >
+                  <IconFlag />
+                </motion.span>
+              )}
+            </AnimatePresence>
             {deckName && (
               <span className="deck-tag">
                 <IconFolder /> {deckName}

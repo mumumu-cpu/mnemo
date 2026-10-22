@@ -1,11 +1,11 @@
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { imagesFrom } from "../image";
-import { addImages, moveItems, removeItem, runAI, setAnswer, setBody, setStatus, useStore } from "../store";
+import { addImages, moveItems, removeItem, runAI, setAnswer, setBody, setMarked, setStatus, useStore } from "../store";
 import { STATUS, type Status } from "../types";
 import { burst } from "./Burst";
 import { DeckPicker } from "./DeckSheets";
-import { IconFolder, IconImage, IconList, IconTrash } from "./Icons";
+import { IconFlag, IconFolder, IconImage, IconList, IconTrash } from "./Icons";
 import { Img } from "./Img";
 import { QAField } from "./QAField";
 
@@ -214,6 +214,18 @@ function Sheet({ id, onClose, onView }: { id: string; onClose: () => void; onVie
               </motion.button>
             ))}
           </div>
+          <motion.button
+            className={`mark-toggle${item.marked ? " on" : ""}`}
+            aria-pressed={!!item.marked}
+            data-testid="sheet-mark"
+            whileTap={{ scale: 0.96 }}
+            onClick={() => setMarked(id, !item.marked)}
+          >
+            <motion.span key={String(!!item.marked)} style={{ display: "grid" }} initial={{ scale: 0.4, rotate: -25 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 600, damping: 18 }}>
+              <IconFlag />
+            </motion.span>
+            {item.marked ? "印あり" : "印をつける"}
+          </motion.button>
 
           <h4>AI</h4>
           <motion.button className={`ai-btn wide${busy ? " busy" : ""}`} data-testid="ai-summary-btn" disabled={busy} whileTap={{ scale: 0.97 }} onClick={summarize}>

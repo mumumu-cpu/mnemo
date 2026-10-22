@@ -482,3 +482,19 @@ textarea { font: inherit; color: inherit; }
 .icon-btn.shuffle.on { color: #fff; background: linear-gradient(135deg, #6f8dff, #9b7bff); box-shadow: 0 6px 16px rgba(110, 110, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
 .dock-btn.danger { color: var(--danger); }
 .dock-btn:disabled { opacity: 0.35; }
+
+/* marks */
+:root { --mark: #ff4f8b; }
+.mark-chip { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; color: #fff; background: linear-gradient(135deg, #ff6aa0, #ff4f8b); box-shadow: 0 3px 10px rgba(255, 79, 139, 0.35); }
+.mark-chip svg { width: 12px; height: 12px; stroke-width: 2.4; fill: currentColor; }
+.round.mark { width: 52px; height: 52px; align-self: center; color: var(--ink-3); }
+.round.mark svg { width: 22px; height: 22px; }
+.round.mark.on { color: #fff; background: linear-gradient(135deg, #ff6aa0, #ff4f8b); box-shadow: 0 8px 22px rgba(255, 79, 139, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+.round.mark.on svg { fill: currentColor; }
+.review-actions { align-items: center; }
+.mark-badge { position: absolute; top: 14px; left: 14px; z-index: 3; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #ff6aa0, #ff4f8b); box-shadow: 0 6px 16px rgba(255, 79, 139, 0.35); }
+.mark-badge svg { width: 16px; height: 16px; fill: currentColor; }
+.mark-toggle { margin-top: 8px; width: 100%; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 7px; font-weight: 600; font-size: 14px; color: var(--ink-2); background: rgba(255, 255, 255, 0.5); }
+.mark-toggle svg { width: 16px; height: 16px; }
+.mark-toggle.on { color: #fff; background: linear-gradient(135deg, #ff6aa0, #ff4f8b); box-shadow: 0 6px 16px rgba(255, 79, 139, 0.3); }
+.mark-toggle.on svg { fill: currentColor; }

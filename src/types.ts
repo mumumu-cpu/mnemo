@@ -12,6 +12,8 @@ export type Item = {
   answerImages?: string[] | null;
   /** The file (deck) this memo belongs to, or null. */
   deckId?: string | null;
+  /** Flagged by the user while reviewing. */
+  marked?: boolean;
   reviews: number;
   createdAt: number;
   updatedAt: number;

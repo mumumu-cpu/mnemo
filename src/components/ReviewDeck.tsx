@@ -1,11 +1,11 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { imagesFrom } from "../image";
-import { getState, setAnswer, setMemo, setStatus, useStore } from "../store";
+import { getState, setAnswer, setMarked, setMemo, setStatus, useStore } from "../store";
 import type { Item } from "../types";
 import { burst } from "./Burst";
 import { DraftThumbs, useDraftImages } from "./DraftImages";
-import { IconCheck, IconFolder, IconHand, IconImage, IconPen, IconRotate, IconShuffle, IconX } from "./Icons";
+import { IconCheck, IconFlag, IconFolder, IconHand, IconImage, IconPen, IconRotate, IconShuffle, IconX } from "./Icons";
 import { Img } from "./Img";
 
 type Result = "ok" | "ng";
@@ -200,6 +200,21 @@ function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void 
             <motion.button className="round glass ng" aria-label="もう一度" whileTap={{ scale: 0.85 }} onClick={() => decide("ng")}>
               <IconRotate />
             </motion.button>
+            <motion.button
+              className={`round glass mark${current.marked ? " on" : ""}`}
+              aria-label="印"
+              aria-pressed={!!current.marked}
+              data-testid="mark-btn"
+              whileTap={{ scale: 0.85 }}
+              onClick={() => {
+                setMarked(current.id, !current.marked);
+                navigator.vibrate?.(10);
+              }}
+            >
+              <motion.span key={String(!!current.marked)} style={{ display: "grid" }} initial={{ scale: 0.4, rotate: -25 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 600, damping: 18 }}>
+                <IconFlag />
+              </motion.span>
+            </motion.button>
             <motion.button className="round glass ok" aria-label="覚えた" whileTap={{ scale: 0.85 }} onClick={() => decide("ok")}>
               <IconCheck />
             </motion.button>
@@ -292,6 +307,13 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
           transition={{ duration: 0.01, delay: 0.1 }}
         >
           <span className="label">Q</span>
+          <AnimatePresence>
+            {item.marked && (
+              <motion.span className="mark-badge" data-testid="card-mark" aria-label="印あり" initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: "spring", stiffness: 600, damping: 20 }}>
+                <IconFlag />
+              </motion.span>
+            )}
+          </AnimatePresence>
           <FaceText {...faceProps("front")} />
           {editing !== "front" && (
             <div className="tap">
@@ -307,6 +329,13 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
           transition={{ duration: 0.01, delay: 0.1 }}
         >
           <span className="label">A</span>
+          <AnimatePresence>
+            {item.marked && (
+              <motion.span className="mark-badge" data-testid="card-mark" aria-label="印あり" initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: "spring", stiffness: 600, damping: 20 }}>
+                <IconFlag />
+              </motion.span>
+            )}
+          </AnimatePresence>
           <FaceText {...faceProps("back")} />
         </motion.div>
       </motion.div>

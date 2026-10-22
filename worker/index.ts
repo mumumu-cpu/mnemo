@@ -23,6 +23,7 @@ type ItemRow = {
   question_images: string | null;
   answer_images: string | null;
   deck_id: string | null;
+  marked: number;
   reviews: number;
   created_at: number;
   updated_at: number;
@@ -85,6 +86,7 @@ const toItem = (r: ItemRow) => ({
   questionImages: r.question_images ? (JSON.parse(r.question_images) as string[]) : null,
   answerImages: r.answer_images ? (JSON.parse(r.answer_images) as string[]) : null,
   deckId: r.deck_id,
+  marked: !!r.marked,
   reviews: r.reviews,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -191,7 +193,7 @@ app.post("/items", async (c) => {
 
 app.patch("/items/:id", async (c) => {
   const b = await c.req.json<
-    Partial<{ body: string; status: number; question: string; answer: string; reviewed: boolean; images: string[]; questionImages: string[]; answerImages: string[]; deckId: string | null }>
+    Partial<{ body: string; status: number; question: string; answer: string; reviewed: boolean; images: string[]; questionImages: string[]; answerImages: string[]; deckId: string | null; marked: boolean }>
   >();
   const sets: string[] = [];
   const vals: unknown[] = [];
@@ -206,6 +208,7 @@ app.patch("/items/:id", async (c) => {
   if (questionImages) (sets.push("question_images = ?"), vals.push(questionImages));
   if (answerImages) (sets.push("answer_images = ?"), vals.push(answerImages));
   if (b.deckId !== undefined) (sets.push("deck_id = ?"), vals.push(await ownDeck(c.env, c.get("uid"), b.deckId)));
+  if (typeof b.marked === "boolean") (sets.push("marked = ?"), vals.push(b.marked ? 1 : 0));
   if (b.reviewed) sets.push("reviews = reviews + 1");
   if (!sets.length) return c.json({ error: "bad_request" }, 400);
   sets.push("updated_at = ?");

@@ -187,6 +187,7 @@ async function flush() {
       const extra: Record<string, unknown> = {};
       if (latest.body !== item.body) extra.body = latest.body;
       if ((latest.deckId ?? null) !== (item.deckId ?? null)) extra.deckId = latest.deckId ?? null;
+      if (latest.marked) extra.marked = true;
       if (latest.images.length !== it.images.length || latest.images.some((k, i) => k !== it.images[i])) extra.images = await upload(latest.images);
       if (latest.question) extra.question = latest.question;
       if (latest.answer) extra.answer = latest.answer;
@@ -296,6 +297,8 @@ export const setStatus = (id: string, status: Status, reviewed = false) =>
     { status, ...(reviewed ? { reviews: (state.items.find((i) => i.id === id)?.reviews ?? 0) + 1 } : {}) },
     { status, reviewed },
   );
+
+export const setMarked = (id: string, marked: boolean) => mutate(id, { marked }, { marked });
 
 export const setBody = (id: string, body: string) => mutate(id, { body }, { body });
 

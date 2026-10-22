@@ -29,3 +29,4 @@ export const IconPlus = base(<path d="M12 5v14M5 12h14" />);
 export const IconSelect = base(<><rect x="3" y="3" width="18" height="18" rx="6" /><path d="m8 12 3 3 5-6" /></>);
 export const IconMore = base(<><circle cx="5" cy="12" r="1.3" fill="currentColor" /><circle cx="12" cy="12" r="1.3" fill="currentColor" /><circle cx="19" cy="12" r="1.3" fill="currentColor" /></>);
 export const IconShuffle = base(<><path d="M16 3h5v5" /><path d="M4 20 21 3" /><path d="M21 16v5h-5" /><path d="m15 15 6 6" /><path d="M4 4l5 5" /></>);
+export const IconFlag = base(<><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" /></>);
