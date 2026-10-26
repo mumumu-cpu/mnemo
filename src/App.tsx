@@ -249,7 +249,7 @@ export function App() {
 
       <DetailSheet id={openId} onClose={close} onView={setViewKey} />
       <ImageViewer k={viewKey} onClose={() => setViewKey(null)} />
-      <ReviewDeck open={reviewing} deckId={deckId} onClose={() => setReviewing(false)} />
+      <ReviewDeck open={reviewing} deckId={deckId} onClose={() => setReviewing(false)} onView={setViewKey} />
       <DeckPicker
         open={picker === "move"}
         title={`${selected.size}件をファイルへ`}

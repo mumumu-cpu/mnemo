@@ -15,8 +15,8 @@ type UpdateCard = (id: string, question: string, answer: string, questionImages?
 
 
 
-export function ReviewDeck({ open, deckId, onClose }: { open: boolean; deckId: string | null; onClose: () => void }) {
-  return <AnimatePresence>{open && <Deck deckId={deckId} onClose={onClose} />}</AnimatePresence>;
+export function ReviewDeck({ open, deckId, onClose, onView }: { open: boolean; deckId: string | null; onClose: () => void; onView: (key: string) => void }) {
+  return <AnimatePresence>{open && <Deck deckId={deckId} onClose={onClose} onView={onView} />}</AnimatePresence>;
 }
 
 const SHUFFLE_KEY = "mnemo-shuffle";
@@ -49,7 +49,7 @@ function faces(it: Item) {
   return { front: it.body, back: it.answer ?? "", frontImages: it.images, backImages: it.answerImages ?? [] };
 }
 
-function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void }) {
+function Deck({ deckId, onClose, onView }: { deckId: string | null; onClose: () => void; onView: (key: string) => void }) {
   const deckName = useStore((s) => s.decks.find((d) => d.id === deckId)?.name);
   const [shuffle, setShuffle] = useState(readShuffle);
   // Snapshot the queue: everything not yet memorised, least-reviewed first, or shuffled.
@@ -164,7 +164,7 @@ function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void 
                   <div className="face glass" />
                 </motion.div>
               )}
-              <FlashCard key={`${round}-${current.id}`} item={current} onDecide={decide} onUpdateCard={onUpdateCard} />
+              <FlashCard key={`${round}-${current.id}`} item={current} onDecide={decide} onUpdateCard={onUpdateCard} onView={onView} />
             </AnimatePresence>
           </div>
           <div className="review-actions">
@@ -196,7 +196,17 @@ function Deck({ deckId, onClose }: { deckId: string | null; onClose: () => void 
   );
 }
 
-function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r: Result) => void; onUpdateCard: UpdateCard }) {
+function FlashCard({
+  item,
+  onDecide,
+  onUpdateCard,
+  onView,
+}: {
+  item: Item;
+  onDecide: (r: Result) => void;
+  onUpdateCard: UpdateCard;
+  onView: (key: string) => void;
+}) {
   const [flipped, setFlipped] = useState(false);
   const [editing, setEditing] = useState<Side | null>(null);
   const x = useMotionValue(0);
@@ -263,7 +273,11 @@ function FlashCard({ item, onDecide, onUpdateCard }: { item: Item; onDecide: (r:
       }}
       onTap={(e) => {
         if (editing || Date.now() - dragged.current < 300) return;
-        if ((e.target as Element | null)?.closest?.("[data-no-flip]")) return;
+        const target = e.target as Element | null;
+        // Tapping an image zooms it instead of flipping the card; dragging from it still swipes.
+        const zoom = target?.closest?.<HTMLElement>("[data-zoom]")?.dataset.zoom;
+        if (zoom) return onView(zoom);
+        if (target?.closest?.("[data-no-flip]")) return;
         setFlipped((v) => !v);
       }}
     >
@@ -319,11 +333,15 @@ function FaceImages({ keys }: { keys: string[] }) {
   return (
     <div className={`fimgs n${Math.min(keys.length, 3)}`} data-testid="face-images">
       {keys.slice(0, 3).map((k) => (
-        <div key={k} className="fimg">
+        <div key={k} className="fimg" data-zoom={k} role="button" aria-label="画像を拡大">
           <Img k={k} />
         </div>
       ))}
-      {keys.length > 3 && <span className="fimgs-more">+{keys.length - 3}</span>}
+      {keys.length > 3 && (
+        <span className="fimgs-more" data-zoom={keys[3]}>
+          +{keys.length - 3}
+        </span>
+      )}
     </div>
   );
 }
