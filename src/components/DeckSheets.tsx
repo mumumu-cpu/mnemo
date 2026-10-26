@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createDeck, removeDeck, renameDeck, useStore } from "../store";
-import { IconCheck, IconFolder, IconPlus, IconTrash } from "./Icons";
+import { downloadCsv, downloadZip } from "../export";
+import { createDeck, getState, removeDeck, renameDeck, useStore } from "../store";
+import { IconCheck, IconDownload, IconFolder, IconPlus, IconTrash } from "./Icons";
 
 function MiniSheet({ open, onClose, label, testId, children }: { open: boolean; onClose: () => void; label: string; testId: string; children: ReactNode }) {
   useEffect(() => {
@@ -146,7 +147,9 @@ export function DeckEditor({ deckId, onClose, onDeleted }: { deckId: string | nu
   const count = useStore((s) => s.items.filter((i) => deckId && i.deckId === deckId).length);
   const [name, setName] = useState("");
   const [confirm, setConfirm] = useState(false);
+  const [zipping, setZipping] = useState<{ done: number; total: number } | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const members = () => getState().items.filter((i) => i.deckId === deckId);
 
   useEffect(() => {
     if (!deck) return;
@@ -175,6 +178,36 @@ export function DeckEditor({ deckId, onClose, onDeleted }: { deckId: string | nu
         </motion.button>
       </form>
       <p className="deck-note">{count}件のメモ</p>
+      <div className="deck-export">
+        <motion.button
+          className="deck-export-btn"
+          data-testid="deck-export-csv"
+          disabled={!count || !!zipping}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => deck && downloadCsv(deck.name, members())}
+        >
+          <IconDownload />
+          CSV
+        </motion.button>
+        <motion.button
+          className={`deck-export-btn${zipping ? " busy" : ""}`}
+          data-testid="deck-export-zip"
+          disabled={!count || !!zipping}
+          whileTap={{ scale: 0.96 }}
+          onClick={async () => {
+            if (!deck) return;
+            setZipping({ done: 0, total: 0 });
+            try {
+              await downloadZip(deck.name, members(), (done, total) => setZipping({ done, total }));
+            } finally {
+              setZipping(null);
+            }
+          }}
+        >
+          {zipping ? <span className="spinner" /> : <IconDownload />}
+          {zipping && zipping.total ? `${zipping.done}/${zipping.total}` : "画像つき（ZIP）"}
+        </motion.button>
+      </div>
       <motion.button
         className={`danger-btn${confirm ? " armed" : ""}`}
         data-testid="deck-delete"

@@ -15,6 +15,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "fflate": "^0.8.2",
     "hono": "^4.13.13",
     "idb-keyval": "^6.3.0",
     "jose": "^6.2.13",

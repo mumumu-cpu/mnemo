@@ -533,3 +533,14 @@ textarea { font: inherit; color: inherit; }
 .card-answer-edit .thumb { width: 56px; height: 56px; border-radius: 12px; }
 .card-answer-tools { display: flex; gap: 6px; align-self: flex-end; }
 .card-answer.editing { align-items: flex-end; }
+
+/* export */
+.deck-export { display: flex; gap: 8px; margin-top: 12px; }
+.deck-export-btn {
+  position: relative; overflow: hidden; flex: 1; height: 46px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-weight: 700; font-size: 14px; color: var(--accent); background: rgba(111, 141, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(111, 141, 255, 0.22);
+}
+.deck-export-btn svg { width: 17px; height: 17px; }
+.deck-export-btn:disabled { opacity: 0.5; }
+.deck-export-btn.busy { opacity: 1; }
+.deck-export-btn.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.8) 50%, transparent 80%); background-size: 200% 100%; animation: sweep 1.1s linear infinite; }
